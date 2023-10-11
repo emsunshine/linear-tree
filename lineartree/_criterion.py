@@ -5,6 +5,7 @@ SCORING = {
     'linear': lambda y, yh: y - yh,
     'square': lambda y, yh: np.square(y - yh),
     'absolute': lambda y, yh: np.abs(y - yh),
+    'square_logarithmic': lambda y, yh: np.square(np.log10(y.clip(1e-6) + 1) - np.log10(yh.clip(1e-6) + 1)),
     'exponential': lambda y, yh: 1 - np.exp(-np.abs(y - yh)),
     'poisson': lambda y, yh: yh.clip(1e-6) - y * np.log(yh.clip(1e-6)),
     'hamming': lambda y, yh, classes: (y != yh).astype(int),
@@ -43,6 +44,14 @@ def mae(model, X, y, weights=None, **largs):
 
     pred = model.predict(X)
     scores = SCORING['absolute'](y, pred)
+
+    return _normalize_score(scores, weights)
+
+def msle(model, X, y, weights=None, **largs):
+    """Root Mean Squared Logarithmic Error"""
+
+    pred = model.predict(X)
+    scores = SCORING['square_logarithmic'](y, pred)
 
     return _normalize_score(scores, weights)
 
