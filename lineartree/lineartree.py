@@ -1659,7 +1659,7 @@ def tree_from_json(filename):
     if params['base_estimator'] == 'LinearRegression()':
         params['base_estimator'] = LinearRegression()
     else:
-        raise Exception(f'base_estimator {params['base_estimator']} not supported')
+        raise Exception(f'base_estimator {params["base_estimator"]} not supported')
 
 
 
