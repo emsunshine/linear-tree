@@ -14,7 +14,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils.validation import has_fit_parameter, check_is_fitted
 
 from ._criterion import SCORING
-from ._criterion import mse, rmse, mae, poisson
+from ._criterion import mse, rmse, mae, msle, poisson
 from ._criterion import hamming, crossentropy
 
 import sklearn
@@ -25,6 +25,7 @@ CRITERIA = {"mse": mse,
             "rmse": rmse,
             "mae": mae,
             "poisson": poisson,
+            "msle": msle,
             "hamming": hamming,
             "crossentropy": crossentropy}
 

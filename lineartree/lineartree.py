@@ -1,8 +1,13 @@
+import copy
+import json
+
 import numpy as np
 
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
+from sklearn.linear_model import LinearRegression
 
+from ._classes import Node
 from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
@@ -159,7 +164,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         -------
         self : object
         """
-        reg_criterions = ('mse', 'rmse', 'mae', 'poisson')
+        reg_criterions = ('mse', 'rmse', 'mae', 'poisson', 'msle')
 
         if self.criterion not in reg_criterions:
             raise ValueError("Regression tasks support only criterion in {}, "
@@ -230,6 +235,64 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
 
         return pred
 
+    def write_to_json(self, filename):
+        """Write the model to a json file.
+
+        Parameters
+        ----------
+        filename : str
+            The path of the file to write.
+        """
+
+        out = copy.deepcopy(self.__dict__)
+
+        out['base_estimator'] = str(out['base_estimator'])
+        out['_categorical_features'] = [int(_) for _ in out['_categorical_features']]
+        out['_split_features'] = [int(_) for _ in out['_split_features']]
+        out['_categorical_features'] = [int(_) for _ in out['_categorical_features']]
+        out['feature_importances_'] = [float(_) for _ in out['feature_importances_']]
+        # out['linear_features'] = [int(x) for x in out['linear_features']]
+        out['_linear_features'] = [int(_) for _ in out['_linear_features']]
+
+        for key, value in self._nodes.items():
+            out['_nodes'][key] = copy.deepcopy(value.__dict__)
+
+            out['_nodes'][key]['loss'] = value.__dict__['loss'].item()
+            out['_nodes'][key]['n_samples'] = int(value.__dict__['n_samples'])
+
+            out['_nodes'][key]['model'] = value.__dict__['model'].__dict__
+            out['_nodes'][key]['model']['coef_'] = [float(_) for _ in out['_nodes'][key]['model']['coef_']]
+            out['_nodes'][key]['model']['intercept_'] = float(out['_nodes'][key]['model']['intercept_'])
+            out['_nodes'][key]['model']['singular_'] = [int(_) for _ in out['_nodes'][key]['model']['singular_']]
+            out['_nodes'][key]['model']['rank_'] = int(out['_nodes'][key]['model']['rank_'])
+            out['_nodes'][key]['model']['n_features_in_'] = int(out['_nodes'][key]['model']['n_features_in_'])
+
+            if value.__dict__['w_loss'] is not None:
+                out['_nodes'][key]['w_loss'] = value.__dict__['w_loss'].item()
+
+            for i, threshold_tuple in enumerate(value.__dict__['threshold']):
+                out['_nodes'][key]['threshold'][i] = (threshold_tuple[0].item(), threshold_tuple[1], threshold_tuple[2].item())
+
+        for key, value in self._leaves.items():
+            out['_leaves'][key] = copy.deepcopy(value.__dict__)
+            out['_leaves'][key]['loss'] = value.__dict__['loss'].item()
+            out['_leaves'][key]['n_samples'] = int(value.__dict__['n_samples'])
+
+            out['_leaves'][key]['model'] = value.__dict__['model'].__dict__
+            out['_leaves'][key]['model']['coef_'] = [float(_) for _ in out['_leaves'][key]['model']['coef_']]
+            out['_leaves'][key]['model']['intercept_'] = float(out['_leaves'][key]['model']['intercept_'])
+            out['_leaves'][key]['model']['singular_'] = [int(_) for _ in out['_leaves'][key]['model']['singular_']]
+            out['_leaves'][key]['model']['rank_'] = int(out['_leaves'][key]['model']['rank_'])
+            out['_leaves'][key]['model']['n_features_in_'] = int(out['_leaves'][key]['model']['n_features_in_'])
+
+            if value.__dict__['w_loss'] is not None:
+                out['_leaves'][key]['w_loss'] = value.__dict__['w_loss'].item()
+
+            for i, threshold_tuple in enumerate(value.__dict__['threshold']):
+                out['_leaves'][key]['threshold'][i] = (threshold_tuple[0].item(), threshold_tuple[1], threshold_tuple[2].item())
+
+        with open(filename, 'w') as outfile:
+            json.dump(out, outfile)
 
 class LinearTreeClassifier(_LinearTree, ClassifierMixin):
     """A Linear Tree Classifier.
@@ -1577,3 +1640,85 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
             classes corresponds to that in the attribute :term:`classes_`.
         """
         return np.log(self.predict_proba(X))
+
+def tree_from_json(filename):
+    """Load a tree from a json file.
+
+    Parameters
+    ----------
+    filename : str
+        The path to the json file.
+
+    Returns
+    -------
+    tree : dict
+        The tree in a dictionary format.
+    """
+    params = json.load(open(filename, 'r'))
+
+    if params['base_estimator'] == 'LinearRegression()':
+        params['base_estimator'] = LinearRegression()
+    else:
+        raise Exception(f'base_estimator {params["base_estimator"]} not supported')
+
+
+
+    for key, value in params['_nodes'].items():
+        node = Node(
+            id = value['id'],
+            parent = value['parent'],
+            model = type(params['base_estimator'])(),
+            loss = value['loss'],
+            n_samples = value['n_samples'],
+            w_loss = value['w_loss'],
+            threshold = value['threshold'],
+            classes = value['classes'],
+        )
+
+        node.model.coef_ = np.array(value['model']['coef_'])
+        node.model.intercept_ = value['model']['intercept_']
+        node.model.singular_ = np.array(value['model']['singular_'])
+        node.model.rank_ = value['model']['rank_']
+        node.model.n_features_in_ = value['model']['n_features_in_']
+
+        params['_nodes'][key] = node
+
+    for key, value in params['_leaves'].items():
+        node = Node(
+            id = value['id'],
+            parent = value['parent'],
+            model = type(params['base_estimator'])(),
+            loss = value['loss'],
+            n_samples = value['n_samples'],
+            w_loss = value['w_loss'],
+            threshold = value['threshold'],
+            classes = value['classes'],
+        )
+
+        node.model.coef_ = np.array(value['model']['coef_'])
+        node.model.intercept_ = value['model']['intercept_']
+        node.model.singular_ = np.array(value['model']['singular_'])
+        node.model.rank_ = value['model']['rank_']
+        node.model.n_features_in_ = value['model']['n_features_in_']
+
+        params['_leaves'][key] = node
+
+    tree = LinearTreeRegressor(
+        base_estimator = params['base_estimator'],
+        criterion = params['criterion'],
+        max_depth = params['max_depth'],
+        min_samples_leaf = params['min_samples_leaf'],
+        categorical_features = params['_categorical_features'],
+        linear_features = params['_linear_features'],
+        split_features = params['_split_features'],
+        )
+
+    tree.n_features_in_ = params['n_features_in_']
+    tree.n_targets_ = params['n_targets_']
+    tree.feature_importances_ = params['feature_importances_']
+    tree._linear_features = params['_linear_features']
+        
+    tree._nodes = params['_nodes']
+    tree._leaves = params['_leaves']
+
+    return tree
