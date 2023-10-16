@@ -442,6 +442,8 @@ class _LinearTree(BaseEstimator):
                 loss = self._nodes[queue[-1]].loss
                 mask = _predict_branch(
                     X, self._nodes[queue[-1]].threshold, start.copy())
+                
+                print(f'Current number of nodes: {len(self._nodes)} | Current number of leaves: {len(self._leaves)}', end="\r")
 
         self.node_count = i
 
@@ -506,8 +508,8 @@ class _LinearTree(BaseEstimator):
             self._min_samples_leaf = int(np.ceil(self.min_samples_leaf * n_sample))
             self._min_samples_leaf = max(3, self._min_samples_leaf)
 
-        if not 1 <= self.max_depth <= 20:
-            raise ValueError("max_depth must be an integer in [1, 20].")
+        if not 1 <= self.max_depth <= 100:
+            raise ValueError("max_depth must be an integer in [1, 100].")
 
         if not 10 <= self.max_bins <= 120:
             raise ValueError("max_bins must be an integer in [10, 120].")

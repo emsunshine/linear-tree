@@ -1680,6 +1680,7 @@ def tree_from_json(filename):
         node.model.singular_ = np.array(value['model']['singular_'])
         node.model.rank_ = value['model']['rank_']
         node.model.n_features_in_ = value['model']['n_features_in_']
+        node.children = value['children']
 
         params['_nodes'][key] = node
 
