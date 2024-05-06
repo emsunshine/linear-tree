@@ -447,7 +447,7 @@ class _LinearTree(BaseEstimator):
 
         return self
 
-    def _fit(self, X, y, sample_weight=None):
+    def _fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -465,6 +465,8 @@ class _LinearTree(BaseEstimator):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
+        live_printing : bool, default=True
+            Print the number of leaves in the tree as the tree is being trained
 
         Returns
         -------
@@ -579,6 +581,9 @@ class _LinearTree(BaseEstimator):
         normalizer = np.sum(self.feature_importances_)
         if normalizer > 0:
             self.feature_importances_ /= normalizer
+
+        if live_printing:
+            print(f'Current number of nodes: {len(self._nodes)} | Current number of leaves: {len(self._leaves)}')
 
         return self
 
