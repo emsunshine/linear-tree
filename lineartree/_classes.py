@@ -514,11 +514,6 @@ class _LinearTree(BaseEstimator):
         if not 10 <= self.max_bins <= 120:
             raise ValueError("max_bins must be an integer in [10, 120].")
 
-        if not hasattr(self.base_estimator, 'fit_intercept'):
-            raise ValueError(
-                "Only linear models are accepted as base_estimator. "
-                "Select one from linear_model class of scikit-learn.")
-
         if self.categorical_features is not None:
             cat_features = np.unique(self.categorical_features)
 
@@ -903,9 +898,6 @@ class _LinearBoosting(TransformerMixin, BaseEstimator):
         -------
         self : object
         """
-        if not hasattr(self.base_estimator, 'fit_intercept'):
-            raise ValueError("Only linear models are accepted as base_estimator. "
-                             "Select one from linear_model class of scikit-learn.")
 
         if self.n_estimators <= 0:
             raise ValueError("n_estimators must be an integer greater than 0 but "
@@ -1089,9 +1081,6 @@ class _LinearForest(BaseEstimator):
         -------
         self : object
         """
-        if not hasattr(self.base_estimator, 'fit_intercept'):
-            raise ValueError("Only linear models are accepted as base_estimator. "
-                             "Select one from linear_model class of scikit-learn.")
 
         if not is_regressor(self.base_estimator):
             raise ValueError("Select a regressor linear model as base_estimator.")
