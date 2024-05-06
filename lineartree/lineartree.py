@@ -143,7 +143,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         self.linear_features = linear_features
         self.n_jobs = n_jobs
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -159,6 +159,9 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
+            
+        live_printing : bool, default=True
+            Print the number of leaves while training
 
         Returns
         -------
@@ -189,7 +192,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         self.n_targets_ = y_shape[1] if len(y_shape) > 1 else 1
         if self.n_targets_ < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
@@ -428,7 +431,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
         self.linear_features = linear_features
         self.n_jobs = n_jobs
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -444,7 +447,10 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
-
+            
+        live_printing : bool, default=True
+            Print the number of leaves while training
+            
         Returns
         -------
         self : object
@@ -475,7 +481,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             sample_weight = _check_sample_weight(sample_weight, X)
 
         self.classes_ = np.unique(y)
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
@@ -732,7 +738,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         self.min_impurity_decrease = min_impurity_decrease
         self.ccp_alpha = ccp_alpha
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Boosting from the training set (X, y).
 
         Parameters
@@ -745,7 +751,10 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
-
+            
+        live_printing : bool, default=True
+            Print the number of leaves while training
+            
         Returns
         -------
         self : object
@@ -775,7 +784,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
@@ -945,7 +954,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
         self.min_impurity_decrease = min_impurity_decrease
         self.ccp_alpha = ccp_alpha
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Boosting from the training set (X, y).
 
         Parameters
@@ -958,6 +967,9 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
+
+        live_printing : bool, default=True
+            Print the number of leaves while training
 
         Returns
         -------
@@ -989,7 +1001,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
             sample_weight = _check_sample_weight(sample_weight, X)
 
         self.classes_ = np.unique(y)
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
@@ -1241,7 +1253,7 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
         self.ccp_alpha = ccp_alpha
         self.max_samples = max_samples
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Forest from the training set (X, y).
 
         Parameters
@@ -1254,6 +1266,9 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
+
+        live_printing : bool, default=True
+            Print the number of leaves while training
 
         Returns
         -------
@@ -1278,7 +1293,7 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
@@ -1504,7 +1519,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
         self.ccp_alpha = ccp_alpha
         self.max_samples = max_samples
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weight=None, live_printing=True):
         """Build a Linear Forest from the training set (X, y).
 
         Parameters
@@ -1517,6 +1532,9 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
+
+        live_printing : bool, default=True
+            Print the number of leaves while training
 
         Returns
         -------
@@ -1543,7 +1561,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
                 "To solve a multi-lable classification task use "
                 "LinearForestClassifier with OneVsRestClassifier from sklearn.")
 
-        self._fit(X, y, sample_weight)
+        self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
 
