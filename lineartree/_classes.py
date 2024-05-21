@@ -511,8 +511,8 @@ class _LinearTree(BaseEstimator):
         if not 1 <= self.max_depth <= 20:
             raise ValueError("max_depth must be an integer in [1, 20].")
 
-        if not 10 <= self.max_bins <= 120:
-            raise ValueError("max_bins must be an integer in [10, 120].")
+        if not 3 <= self.max_bins <= 120:
+            raise ValueError("max_bins must be an integer in [3, 120].")
 
         if self.categorical_features is not None:
             cat_features = np.unique(self.categorical_features)
