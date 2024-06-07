@@ -847,12 +847,13 @@ class _LinearTree(BaseEstimator):
         have a circular one.
         """
         from IPython.display import Image
+        from IPython.display import SVG
 
         graph = self.model_to_dot(feature_names=feature_names, max_depth=max_depth)
         if format == "png":
             return Image(graph.create_png())
         elif format == "svg":
-            return Image(graph.create_svg())
+            return SVG(graph.create_svg())
         else:
             raise NotImplementedError("Unsupported Format")
 
