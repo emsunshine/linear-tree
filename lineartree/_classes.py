@@ -824,7 +824,7 @@ class _LinearTree(BaseEstimator):
 
         return graph
 
-    def plot_model(self, feature_names=None, max_depth=None):
+    def plot_model(self, feature_names=None, max_depth=None, format = "png"):
         """Convert a fitted Linear Tree model to dot format and display it.
         It results in ModuleNotFoundError if graphviz or pydot are not available.
         When installing graphviz make sure to add it to the system path.
@@ -849,8 +849,12 @@ class _LinearTree(BaseEstimator):
         from IPython.display import Image
 
         graph = self.model_to_dot(feature_names=feature_names, max_depth=max_depth)
-
-        return Image(graph.create_png())
+        if format == "png":
+            return Image(graph.create_png())
+        elif format == "svg":
+            return Image(graph.create_svg())
+        else:
+            raise NotImplementedError("Unsupported Format")
 
 
 class _LinearBoosting(TransformerMixin, BaseEstimator):
