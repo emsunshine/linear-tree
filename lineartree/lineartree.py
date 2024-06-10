@@ -269,6 +269,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             out['_nodes'][key]['model']['singular_'] = [int(_) for _ in out['_nodes'][key]['model']['singular_']]
             out['_nodes'][key]['model']['rank_'] = int(out['_nodes'][key]['model']['rank_'])
             out['_nodes'][key]['model']['n_features_in_'] = int(out['_nodes'][key]['model']['n_features_in_'])
+            out['_nodes'][key]['model']['children'] = out['_nodes'][key]['model']['children']
 
             if value.__dict__['w_loss'] is not None:
                 out['_nodes'][key]['w_loss'] = value.__dict__['w_loss'].item()
