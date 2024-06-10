@@ -1692,7 +1692,7 @@ def tree_from_json(filename):
             w_loss = value['w_loss'],
             threshold = value['threshold'],
             classes = value['classes'],
-            children = value['children],
+            children = value['children'],
         )
 
         node.model.coef_ = np.array(value['model']['coef_'])
