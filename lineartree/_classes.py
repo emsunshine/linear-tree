@@ -72,7 +72,7 @@ def _partition_columns(columns, n_jobs):
     n_columns_per_job = torch.full((n_jobs,), n_columns // n_jobs, dtype=int)
     n_columns_per_job[:n_columns % n_jobs] += 1
     columns_per_job = torch.cumsum(n_columns_per_job, dim=0)
-    columns_per_job = torch.split(columns, columns_per_job)
+    columns_per_job = torch.tensor_split(columns, columns_per_job)
     columns_per_job = columns_per_job[:-1]
 
     return n_jobs, columns_per_job
@@ -103,13 +103,12 @@ def _parallel_binning_fit(split_feat, _self, X, y,
             mask = (X[:, col] > q)
 
             n_left, n_right = (~mask).sum(), mask.sum()
-
             if n_left < _self._min_samples_leaf or n_right < _self._min_samples_leaf:
                 continue
 
             # create 2D bool mask for right/left children
-            left_mesh = torch.ix_(~mask, _self._linear_features)
-            right_mesh = torch.ix_(mask, _self._linear_features)
+            left_mesh = ~mask #torch.ix_(~mask, _self._linear_features)
+            right_mesh = mask #torch.ix_(mask, _self._linear_features)
 
             model_left = deepcopy(_self.base_estimator)
             model_right = deepcopy(_self.base_estimator)
@@ -273,7 +272,6 @@ class _LinearTree(BaseEstimator):
         """
         # Parallel loops
         n_jobs, split_feat = _partition_columns(self._split_features, self.n_jobs)
-
         # partition columns splittings between jobs
         all_results = Parallel(n_jobs=n_jobs, verbose=0,
                                **self._parallel_args())(
@@ -296,7 +294,6 @@ class _LinearTree(BaseEstimator):
             left_node.append(job_res[3])
             right_node.append(job_res[4])
 
-        print(all_results)
         _losses = torch.Tensor(_losses)
 
         # select best results
@@ -380,7 +377,7 @@ class _LinearTree(BaseEstimator):
 
         # in the beginning consider all the samples
         start = torch.Tensor([True]).repeat(n_sample)
-        mask = start.clone().type(torch.int)
+        mask = start.clone().type(torch.bool)
 
         i = 1
         while len(queue) > 0:
