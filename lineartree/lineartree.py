@@ -13,12 +13,19 @@ from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
 class TorchLinearRegression(LinearRegression):
+    def __init__(self, add_bias=True):
+        super().__init__()
+        self.add_bias = add_bias
     def fit(self, x, y):
         if not isinstance(x, torch.Tensor):
             x = torch.Tensor(x)
+        if self.add_bias:
+            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
         self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
         
     def predict(self, x):
+        if self.add_bias:
+            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
         return self.params.T @ x.T
 
 class LinearTreeRegressor(_LinearTree, RegressorMixin):
@@ -238,7 +245,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         if self.n_targets_ > 1:
             pred = torch.zeros((X.shape[0], self.n_targets_))
         else:
-            pred = torch.zeros(X.shape[0])
+            pred = torch.zeros(X.shape[0], device = X.device)
 
         for L in self._leaves.values():
 
@@ -246,7 +253,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             if (~mask).all():
                 continue
 
-            pred[mask] = L.model.predict(X[torch.ix_(mask, self._linear_features)])
+            pred[mask] = L.model.predict(X[mask])
 
         return pred
 
@@ -534,7 +541,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             if (~mask).all():
                 continue
 
-            pred[mask] = L.model.predict(X[torch.ix_(mask, self._linear_features)])
+            pred[mask] = L.model.predict(X[mask])
 
         return pred
 

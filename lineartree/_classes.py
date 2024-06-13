@@ -153,7 +153,7 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                                    weights=weights[mask], **largs_right)
                 wloss_right = loss_right * (weights[mask].sum() / weights.sum())
 
-            total_loss = torch.round(wloss_left + wloss_right, decimals=5)
+            total_loss = wloss_left + wloss_right #torch.round(wloss_left + wloss_right, decimals=5)
 
             # store if best
             if total_loss < loss:
@@ -182,7 +182,7 @@ def _predict_branch(X, branch_history, mask=None):
     """Utility to map samples to branches"""
 
     if mask is None:
-        mask = torch.Tensor([True]).repeat(X.shape[0])
+        mask = torch.tensor([True], device = X.device).repeat(X.shape[0])
 
     for node in branch_history:
         mask = torch.logical_and(_map_node(X, *node), mask)
@@ -294,7 +294,7 @@ class _LinearTree(BaseEstimator):
             left_node.append(job_res[3])
             right_node.append(job_res[4])
 
-        _losses = torch.Tensor(_losses)
+        _losses = torch.tensor(_losses, device = X.device)
 
         # select best results
         _id_best = torch.argmin(_losses, dim = 0)
@@ -333,10 +333,10 @@ class _LinearTree(BaseEstimator):
         self : object
         """
         n_sample, self.n_features_in_ = X.shape
-        self.feature_importances_ = torch.zeros((self.n_features_in_,))
+        self.feature_importances_ = torch.zeros((self.n_features_in_), device = X.device)
 
         # extract quantiles
-        bins = torch.linspace(0, 1, self.max_bins)[1:-1]
+        bins = torch.linspace(0, 1, self.max_bins, device = X.device)[1:-1]
         bins = torch.quantile(X, bins, axis=0)
         bins = list(bins.T)
         bins = [torch.unique(X[:, c]) if c in self._categorical_features
@@ -365,7 +365,7 @@ class _LinearTree(BaseEstimator):
         loss = CRITERIA[self.criterion](
             model, X[:, self._linear_features], y,
             weights=weights, **largs)
-        loss = torch.round(loss, decimals=5)
+        # loss = torch.round(loss, decimals=5)
 
         self._nodes[''] = Node(
             id=0,
@@ -376,7 +376,7 @@ class _LinearTree(BaseEstimator):
         )
 
         # in the beginning consider all the samples
-        start = torch.Tensor([True]).repeat(n_sample)
+        start = torch.tensor([True], device = X.device).repeat(n_sample)
         mask = start.clone().type(torch.bool)
 
         i = 1
@@ -489,7 +489,7 @@ class _LinearTree(BaseEstimator):
                     "a float in (0.0, 1.0); got the float {}".format(
                         self.min_samples_split))
 
-            self._min_samples_split = int(torch.ceil(torch.Tensor([self.min_samples_split * n_sample])))
+            self._min_samples_split = int(torch.ceil(torch.tensor([self.min_samples_split * n_sample]), device = X.device))
             self._min_samples_split = max(6, self._min_samples_split)
 
         if isinstance(self.min_samples_leaf, numbers.Integral):
@@ -506,8 +506,8 @@ class _LinearTree(BaseEstimator):
                     "a float in (0.0, 1.0); got the float {}".format(
                         self.min_samples_leaf))
 
-            self._min_samples_leaf = int(torch.ceil(torch.Tensor([self.min_samples_leaf * n_sample])))
-            self._min_samples_leaf = max(3, self._min_samples_leaf)
+            self._min_samples_leaf = torch.ceil(torch.tensor([self.min_samples_leaf * n_sample], device = X.device)).type(torch.int)
+            self._min_samples_leaf = torch.max(torch.tensor([3], device=X.device), self._min_samples_leaf)
 
         if not 1 <= self.max_depth <= 20:
             raise ValueError("max_depth must be an integer in [1, 20].")
@@ -549,7 +549,7 @@ class _LinearTree(BaseEstimator):
                     'Splitting features must be in [0, {}].'.format(
                         n_feat - 1))
         else:
-            split_features = torch.arange(n_feat)
+            split_features = torch.arange(n_feat, device = X.device)
         self._split_features = split_features
 
         if self.linear_features is not None:
@@ -570,7 +570,7 @@ class _LinearTree(BaseEstimator):
                     "Linear features cannot be categorical features.")
         else:
             # linear_features = torch.setdiff1d(torch.arange(n_feat), cat_features)
-            combined = torch.cat((torch.arange(n_feat), torch.Tensor(cat_features)))
+            combined = torch.cat((torch.arange(n_feat, device = X.device), torch.tensor(cat_features, device = X.device)))
             uniques, counts = combined.unique(return_counts=True)
             linear_features = uniques[counts == 1].type(torch.int)
         self._linear_features = linear_features
@@ -658,8 +658,8 @@ class _LinearTree(BaseEstimator):
 
                 summary[N.id] = {
                     'col': feature_names[Cl.threshold[-1][0]],
-                    'th': torch.round(Cl.threshold[-1][-1], decimals=5),
-                    'loss': torch.round(Cl.w_loss + Cr.w_loss, decimals=5),
+                    'th': Cl.threshold[-1][-1], #torch.round(Cl.threshold[-1][-1], decimals=5),
+                    'loss': Cl.w_loss + Cr.w_loss, #torch.round(Cl.w_loss + Cr.w_loss, decimals=5),
                     'samples': Cl.n_samples + Cr.n_samples,
                     'children': (Cl.id, Cr.id),
                     'models': (Cl.model, Cr.model)
@@ -671,7 +671,7 @@ class _LinearTree(BaseEstimator):
                 continue
 
             summary[L.id] = {
-                'loss': torch.round(L.loss, decimals=5),
+                'loss': L.loss, #torch.round(L.loss, decimals=5),
                 'samples': L.n_samples,
                 'models': L.model
             }
@@ -1098,7 +1098,7 @@ class _LinearForest(BaseEstimator):
 
         if hasattr(self, 'classes_'):
             class_to_int = dict(map(reversed, enumerate(self.classes_)))
-            y = torch.Tensor([class_to_int[i] for i in y])
+            y = torch.tensor([class_to_int[i] for i in y], device = X.device)
             y = self._inv_sigmoid(y)
 
         self.base_estimator_ = deepcopy(self.base_estimator)
