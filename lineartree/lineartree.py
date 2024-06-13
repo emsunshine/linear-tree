@@ -26,7 +26,7 @@ class TorchLinearRegression(LinearRegression):
     def predict(self, x):
         if self.add_bias:
             x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-        return self.params.T @ x.T
+        return x @ self.params
 
 class LinearTreeRegressor(_LinearTree, RegressorMixin):
     """A Linear Tree Regressor.
