@@ -12,6 +12,14 @@ from ._classes import Node
 from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
+class TorchLinearRegression(LinearRegression):
+    def fit(self, x, y):
+        if not isinstance(x, torch.Tensor):
+            x = torch.Tensor(x)
+        self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
+        
+    def predict(self, x):
+        return self.params.T @ x.T
 
 class LinearTreeRegressor(_LinearTree, RegressorMixin):
     """A Linear Tree Regressor.
@@ -127,7 +135,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
     >>> regr.predict([[0, 0, 0, 0]])
     array([8.8817842e-16])
     """
-    def __init__(self, base_estimator, *, criterion='mse', max_depth=5,
+    def __init__(self, *, base_estimator=TorchLinearRegression(), criterion='mse', max_depth=5,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
                  split_features=None, linear_features=None, n_jobs=None):
@@ -1689,7 +1697,7 @@ def tree_from_json(filename):
     params = json.load(open(filename, 'r'))
 
     if params['base_estimator'] == 'LinearRegression()':
-        params['base_estimator'] = LinearRegression()
+        params['base_estimator'] = TorchLinearRegression()
     else:
         raise Exception(f'base_estimator {params["base_estimator"]} not supported')
 
