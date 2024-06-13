@@ -707,10 +707,11 @@ class _LinearTree(BaseEstimator):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
-        X_leaves = torch.zeros(X.shape[0], dtype='int64')
+        X_leaves = torch.zeros((X.shape[0],), dtype=torch.int, device = X.device)
 
         for L in self._leaves.values():
 
@@ -800,12 +801,12 @@ class _LinearTree(BaseEstimator):
         for n in summary:
             if 'col' in summary[n]:
                 if isinstance(summary[n]['col'], str):
-                    msg = "id_node: {}\n{} <= {}\nloss: {:.4f}\nsamples: {}"
+                    msg = "id_node: {}\n{} <= {:.4e}\nloss: {:.4e}\nsamples: {}"
                 else:
-                    msg = "id_node: {}\nX[{}] <= {}\nloss: {:.4f}\nsamples: {}"
+                    msg = "id_node: {}\nX[{}] <= {:.4e}\nloss: {:.4e}\nsamples: {}"
 
                 msg = msg.format(
-                    n, summary[n]['col'], summary[n]['th'],
+                    n, summary[n]['col'], float(summary[n]['th']),
                     summary[n]['loss'], summary[n]['samples']
                 )
                 graph.add_node(pydot.Node(n, label=msg, shape='rectangle'))
@@ -816,7 +817,7 @@ class _LinearTree(BaseEstimator):
                                                   shape='rectangle'))
 
             else:
-                msg = "id_node: {}\nloss: {:.4f}\nsamples: {}".format(
+                msg = "id_node: {}\nloss: {:.4e}\nsamples: {}".format(
                     n, summary[n]['loss'], summary[n]['samples'])
                 graph.add_node(pydot.Node(n, label=msg))
 
