@@ -1,7 +1,8 @@
 import copy
 import json
 
-import numpy as np
+# import numpy as np
+import torch
 
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
@@ -174,6 +175,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
                              "got '{}'.".format(reg_criterions, self.criterion))
 
         # Convert data (X is required to be 2d and indexable)
+
         X, y = self._validate_data(
             X, y,
             reset=True,
@@ -184,11 +186,12 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             allow_nd=False,
             multi_output=True,
             y_numeric=True,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        y_shape = np.shape(y)
+        y_shape = y.shape
         self.n_targets_ = y_shape[1] if len(y_shape) > 1 else 1
         if self.n_targets_ < 2:
             y = y.ravel()
@@ -220,13 +223,14 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
         if self.n_targets_ > 1:
-            pred = np.zeros((X.shape[0], self.n_targets_))
+            pred = torch.zeros((X.shape[0], self.n_targets_))
         else:
-            pred = np.zeros(X.shape[0])
+            pred = torch.zeros(X.shape[0])
 
         for L in self._leaves.values():
 
@@ -234,7 +238,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             if (~mask).all():
                 continue
 
-            pred[mask] = L.model.predict(X[np.ix_(mask, self._linear_features)])
+            pred[mask] = L.model.predict(X[torch.ix_(mask, self._linear_features)])
 
         return pred
 
@@ -477,11 +481,12 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             ensure_2d=True,
             allow_nd=False,
             multi_output=False,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        self.classes_ = np.unique(y)
+        self.classes_ = torch.unique(y)
         self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
@@ -509,10 +514,11 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
-        pred = np.empty(X.shape[0], dtype=self.classes_.dtype)
+        pred = torch.empty(X.shape[0], dtype=self.classes_.dtype)
 
         for L in self._leaves.values():
 
@@ -520,7 +526,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             if (~mask).all():
                 continue
 
-            pred[mask] = L.model.predict(X[np.ix_(mask, self._linear_features)])
+            pred[mask] = L.model.predict(X[torch.ix_(mask, self._linear_features)])
 
         return pred
 
@@ -551,10 +557,11 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
-        pred = np.zeros((X.shape[0], len(self.classes_)))
+        pred = torch.zeros((X.shape[0], len(self.classes_)))
 
         if hasattr(self.base_estimator, 'predict_proba'):
             for L in self._leaves.values():
@@ -563,14 +570,14 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
                 if (~mask).all():
                     continue
 
-                pred[np.ix_(mask, np.isin(self.classes_, L.classes))] = \
-                    L.model.predict_proba(X[np.ix_(mask, self._linear_features)])
+                pred[torch.ix_(mask, torch.isin(self.classes_, L.classes))] = \
+                    L.model.predict_proba(X[torch.ix_(mask, self._linear_features)])
 
         else:
             pred_class = self.predict(X)
             class_to_int = dict(map(reversed, enumerate(self.classes_)))
-            pred_class = np.array([class_to_int[i] for i in pred_class])
-            pred[np.arange(X.shape[0]), pred_class] = 1
+            pred_class = torch.Tensor([class_to_int[i] for i in pred_class])
+            pred[torch.arange(X.shape[0]), pred_class] = 1
 
         return pred
 
@@ -591,7 +598,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             The class log-probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        return np.log(self.predict_proba(X))
+        return torch.log(self.predict_proba(X))
 
 
 class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
@@ -777,11 +784,12 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
             allow_nd=False,
             multi_output=True,
             y_numeric=True,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        y_shape = np.shape(y)
+        y_shape = y.shape
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
@@ -997,11 +1005,12 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
             ensure_2d=True,
             allow_nd=False,
             multi_output=False,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        self.classes_ = np.unique(y)
+        self.classes_ = torch.unique(y)
         self._fit(X, y, sample_weight, live_printing=live_printing)
 
         return self
@@ -1046,10 +1055,10 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
 
         else:
             pred_class = self.predict(X)
-            pred = np.zeros((pred_class.shape[0], len(self.classes_)))
+            pred = torch.zeros((pred_class.shape[0], len(self.classes_)))
             class_to_int = dict(map(reversed, enumerate(self.classes_)))
-            pred_class = np.array([class_to_int[v] for v in pred_class])
-            pred[np.arange(pred_class.shape[0]), pred_class] = 1
+            pred_class = torch.Tensor([class_to_int[v] for v in pred_class])
+            pred[torch.arange(pred_class.shape[0]), pred_class] = 1
 
         return pred
 
@@ -1070,7 +1079,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
             The class log-probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        return np.log(self.predict_proba(X))
+        return torch.log(self.predict_proba(X))
 
 
 class LinearForestRegressor(_LinearForest, RegressorMixin):
@@ -1286,11 +1295,12 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
             allow_nd=False,
             multi_output=True,
             y_numeric=True,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        y_shape = np.shape(y)
+        y_shape = y.shape
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
@@ -1322,7 +1332,8 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
         linear_pred = self.base_estimator_.predict(X)
@@ -1551,11 +1562,12 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
             ensure_2d=True,
             allow_nd=False,
             multi_output=False,
+            cast_to_ndarray = False,
         )
         if sample_weight is not None:
             sample_weight = _check_sample_weight(sample_weight, X)
 
-        self.classes_ = np.unique(y)
+        self.classes_ = torch.unique(y)
         if len(self.classes_) > 2:
             raise ValueError(
                 "LinearForestClassifier supports only binary classification task. "
@@ -1594,7 +1606,8 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
         linear_pred = self.base_estimator_.predict(X)
@@ -1618,7 +1631,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
         pred = self.decision_function(X)
         pred_class = (self._sigmoid(pred) > 0.5).astype(int)
         int_to_class = dict(enumerate(self.classes_))
-        pred_class = np.array([int_to_class[i] for i in pred_class])
+        pred_class = torch.Tensor([int_to_class[i] for i in pred_class])
 
         return pred_class
 
@@ -1638,7 +1651,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
         """
 
         pred = self._sigmoid(self.decision_function(X))
-        proba = np.zeros((X.shape[0], 2))
+        proba = torch.zeros((X.shape[0], 2))
         proba[:, 0] = 1 - pred
         proba[:, 1] = pred
 
@@ -1658,7 +1671,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
             The class log-probabilities of the input samples. The order of the
             classes corresponds to that in the attribute :term:`classes_`.
         """
-        return np.log(self.predict_proba(X))
+        return torch.log(self.predict_proba(X))
 
 def tree_from_json(filename):
     """Load a tree from a json file.
@@ -1695,9 +1708,9 @@ def tree_from_json(filename):
             children = value['children'],
         )
 
-        node.model.coef_ = np.array(value['model']['coef_'])
+        node.model.coef_ = torch.Tensor(value['model']['coef_'])
         node.model.intercept_ = value['model']['intercept_']
-        node.model.singular_ = np.array(value['model']['singular_'])
+        node.model.singular_ = torch.Tensor(value['model']['singular_'])
         node.model.rank_ = value['model']['rank_']
         node.model.n_features_in_ = value['model']['n_features_in_']
 
@@ -1715,9 +1728,9 @@ def tree_from_json(filename):
             classes = value['classes'],
         )
 
-        node.model.coef_ = np.array(value['model']['coef_'])
+        node.model.coef_ = torch.Tensor(value['model']['coef_'])
         node.model.intercept_ = value['model']['intercept_']
-        node.model.singular_ = np.array(value['model']['singular_'])
+        node.model.singular_ = torch.Tensor(value['model']['singular_'])
         node.model.rank_ = value['model']['rank_']
         node.model.n_features_in_ = value['model']['n_features_in_']
 

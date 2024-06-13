@@ -1,6 +1,7 @@
 import numbers
-import numpy as np
+#import numpy as np
 import scipy.sparse as sp
+import torch
 
 from copy import deepcopy
 from joblib import Parallel, effective_n_jobs  # , delayed
@@ -68,10 +69,10 @@ def _partition_columns(columns, n_jobs):
     n_jobs = min(effective_n_jobs(n_jobs), n_columns)
 
     # Partition columns between jobs
-    n_columns_per_job = np.full(n_jobs, n_columns // n_jobs, dtype=int)
+    n_columns_per_job = torch.full((n_jobs,), n_columns // n_jobs, dtype=int)
     n_columns_per_job[:n_columns % n_jobs] += 1
-    columns_per_job = np.cumsum(n_columns_per_job)
-    columns_per_job = np.split(columns, columns_per_job)
+    columns_per_job = torch.cumsum(n_columns_per_job, dim=0)
+    columns_per_job = torch.split(columns, columns_per_job)
     columns_per_job = columns_per_job[:-1]
 
     return n_jobs, columns_per_job
@@ -107,15 +108,15 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                 continue
 
             # create 2D bool mask for right/left children
-            left_mesh = np.ix_(~mask, _self._linear_features)
-            right_mesh = np.ix_(mask, _self._linear_features)
+            left_mesh = torch.ix_(~mask, _self._linear_features)
+            right_mesh = torch.ix_(mask, _self._linear_features)
 
             model_left = deepcopy(_self.base_estimator)
             model_right = deepcopy(_self.base_estimator)
 
             if hasattr(_self, 'classes_'):
-                largs_left['classes'] = np.unique(y[~mask])
-                largs_right['classes'] = np.unique(y[mask])
+                largs_left['classes'] = torch.unique(y[~mask])
+                largs_right['classes'] = torch.unique(y[mask])
                 if len(largs_left['classes']) == 1:
                     model_left = DummyClassifier(strategy="most_frequent")
                 if len(largs_right['classes']) == 1:
@@ -153,7 +154,7 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                                    weights=weights[mask], **largs_right)
                 wloss_right = loss_right * (weights[mask].sum() / weights.sum())
 
-            total_loss = round(wloss_left + wloss_right, 5)
+            total_loss = torch.round(wloss_left + wloss_right, decimals=5)
 
             # store if best
             if total_loss < loss:
@@ -182,10 +183,10 @@ def _predict_branch(X, branch_history, mask=None):
     """Utility to map samples to branches"""
 
     if mask is None:
-        mask = np.repeat(True, X.shape[0])
+        mask = torch.Tensor([True]).repeat(X.shape[0])
 
     for node in branch_history:
-        mask = np.logical_and(_map_node(X, *node), mask)
+        mask = torch.logical_and(_map_node(X, *node), mask)
 
     return mask
 
@@ -295,8 +296,11 @@ class _LinearTree(BaseEstimator):
             left_node.append(job_res[3])
             right_node.append(job_res[4])
 
+        print(all_results)
+        _losses = torch.Tensor(_losses)
+
         # select best results
-        _id_best = np.argmin(_losses)
+        _id_best = torch.argmin(_losses, dim = 0)
         if loss - _losses[_id_best] > self.min_impurity_decrease:
             split_t = split_t[_id_best]
             split_col = split_col[_id_best]
@@ -332,14 +336,14 @@ class _LinearTree(BaseEstimator):
         self : object
         """
         n_sample, self.n_features_in_ = X.shape
-        self.feature_importances_ = np.zeros((self.n_features_in_,))
+        self.feature_importances_ = torch.zeros((self.n_features_in_,))
 
         # extract quantiles
-        bins = np.linspace(0, 1, self.max_bins)[1:-1]
-        bins = np.quantile(X, bins, axis=0)
+        bins = torch.linspace(0, 1, self.max_bins)[1:-1]
+        bins = torch.quantile(X, bins, axis=0)
         bins = list(bins.T)
-        bins = [np.unique(X[:, c]) if c in self._categorical_features
-                else np.unique(q) for c, q in enumerate(bins)]
+        bins = [torch.unique(X[:, c]) if c in self._categorical_features
+                else torch.unique(q) for c, q in enumerate(bins)]
 
         # check if base_estimator supports fitting with sample_weights
         support_sample_weight = has_fit_parameter(self.base_estimator,
@@ -364,7 +368,7 @@ class _LinearTree(BaseEstimator):
         loss = CRITERIA[self.criterion](
             model, X[:, self._linear_features], y,
             weights=weights, **largs)
-        loss = round(loss, 5)
+        loss = torch.round(loss, decimals=5)
 
         self._nodes[''] = Node(
             id=0,
@@ -375,8 +379,8 @@ class _LinearTree(BaseEstimator):
         )
 
         # in the beginning consider all the samples
-        start = np.repeat(True, n_sample)
-        mask = start.copy()
+        start = torch.Tensor([True]).repeat(n_sample)
+        mask = start.clone().type(torch.int)
 
         i = 1
         while len(queue) > 0:
@@ -441,7 +445,7 @@ class _LinearTree(BaseEstimator):
             if len(queue) > 0:
                 loss = self._nodes[queue[-1]].loss
                 mask = _predict_branch(
-                    X, self._nodes[queue[-1]].threshold, start.copy())
+                    X, self._nodes[queue[-1]].threshold, start.clone())
 
         self.node_count = i
 
@@ -488,7 +492,7 @@ class _LinearTree(BaseEstimator):
                     "a float in (0.0, 1.0); got the float {}".format(
                         self.min_samples_split))
 
-            self._min_samples_split = int(np.ceil(self.min_samples_split * n_sample))
+            self._min_samples_split = int(torch.ceil(torch.Tensor([self.min_samples_split * n_sample])))
             self._min_samples_split = max(6, self._min_samples_split)
 
         if isinstance(self.min_samples_leaf, numbers.Integral):
@@ -505,7 +509,7 @@ class _LinearTree(BaseEstimator):
                     "a float in (0.0, 1.0); got the float {}".format(
                         self.min_samples_leaf))
 
-            self._min_samples_leaf = int(np.ceil(self.min_samples_leaf * n_sample))
+            self._min_samples_leaf = int(torch.ceil(torch.Tensor([self.min_samples_leaf * n_sample])))
             self._min_samples_leaf = max(3, self._min_samples_leaf)
 
         if not 1 <= self.max_depth <= 20:
@@ -515,7 +519,7 @@ class _LinearTree(BaseEstimator):
             raise ValueError("max_bins must be an integer in [3, 120].")
 
         if self.categorical_features is not None:
-            cat_features = np.unique(self.categorical_features)
+            cat_features = torch.unique(self.categorical_features)
 
             if not issubclass(cat_features.dtype.type, numbers.Integral):
                 raise ValueError(
@@ -536,7 +540,7 @@ class _LinearTree(BaseEstimator):
         self._categorical_features = cat_features
 
         if self.split_features is not None:
-            split_features = np.unique(self.split_features)
+            split_features = torch.unique(self.split_features)
 
             if not issubclass(split_features.dtype.type, numbers.Integral):
                 raise ValueError(
@@ -548,11 +552,11 @@ class _LinearTree(BaseEstimator):
                     'Splitting features must be in [0, {}].'.format(
                         n_feat - 1))
         else:
-            split_features = np.arange(n_feat)
+            split_features = torch.arange(n_feat)
         self._split_features = split_features
 
         if self.linear_features is not None:
-            linear_features = np.unique(self.linear_features)
+            linear_features = torch.unique(self.linear_features)
 
             if not issubclass(linear_features.dtype.type, numbers.Integral):
                 raise ValueError(
@@ -564,16 +568,19 @@ class _LinearTree(BaseEstimator):
                     'Linear features must be in [0, {}].'.format(
                         n_feat - 1))
 
-            if np.isin(linear_features, cat_features).any():
+            if torch.isin(linear_features, cat_features).any():
                 raise ValueError(
                     "Linear features cannot be categorical features.")
         else:
-            linear_features = np.setdiff1d(np.arange(n_feat), cat_features)
+            # linear_features = torch.setdiff1d(torch.arange(n_feat), cat_features)
+            combined = torch.cat((torch.arange(n_feat), torch.Tensor(cat_features)))
+            uniques, counts = combined.unique(return_counts=True)
+            linear_features = uniques[counts == 1].type(torch.int)
         self._linear_features = linear_features
 
         self._grow(X, y, sample_weight)
 
-        normalizer = np.sum(self.feature_importances_)
+        normalizer = torch.sum(self.feature_importances_)
         if normalizer > 0:
             self.feature_importances_ /= normalizer
 
@@ -639,7 +646,7 @@ class _LinearTree(BaseEstimator):
                         self.n_features_in_, len(feature_names)))
 
             if feature_names is None:
-                feature_names = np.arange(self.n_features_in_)
+                feature_names = torch.arange(self.n_features_in_)
 
             for n, N in self._nodes.items():
 
@@ -654,8 +661,8 @@ class _LinearTree(BaseEstimator):
 
                 summary[N.id] = {
                     'col': feature_names[Cl.threshold[-1][0]],
-                    'th': round(Cl.threshold[-1][-1], 5),
-                    'loss': round(Cl.w_loss + Cr.w_loss, 5),
+                    'th': torch.round(Cl.threshold[-1][-1], decimals=5),
+                    'loss': torch.round(Cl.w_loss + Cr.w_loss, decimals=5),
                     'samples': Cl.n_samples + Cr.n_samples,
                     'children': (Cl.id, Cr.id),
                     'models': (Cl.model, Cr.model)
@@ -667,7 +674,7 @@ class _LinearTree(BaseEstimator):
                 continue
 
             summary[L.id] = {
-                'loss': round(L.loss, 5),
+                'loss': torch.round(L.loss, decimals=5),
                 'samples': L.n_samples,
                 'models': L.model
             }
@@ -706,7 +713,7 @@ class _LinearTree(BaseEstimator):
             ensure_min_features=self.n_features_in_
         )
 
-        X_leaves = np.zeros(X.shape[0], dtype='int64')
+        X_leaves = torch.zeros(X.shape[0], dtype='int64')
 
         for L in self._leaves.values():
 
@@ -745,7 +752,7 @@ class _LinearTree(BaseEstimator):
             ensure_min_features=self.n_features_in_
         )
 
-        indicator = np.zeros((X.shape[0], self.node_count), dtype='int64')
+        indicator = torch.zeros((X.shape[0], self.node_count), dtype='int64')
 
         for L in self._leaves.values():
 
@@ -762,7 +769,7 @@ class _LinearTree(BaseEstimator):
                 p = self._nodes[p].parent
                 paths_id.append(n)
 
-            indicator[np.ix_(mask, paths_id)] = 1
+            indicator[torch.ix_(mask, paths_id)] = 1
 
         return sp.csr_matrix(indicator)
 
@@ -948,13 +955,13 @@ class _LinearBoosting(TransformerMixin, BaseEstimator):
             tree.fit(X, resid, sample_weight=sample_weight, check_input=False)
             self._trees.append(tree)
 
-            pred_tree = np.abs(tree.predict(X, check_input=False))
-            worst_pred = np.max(pred_tree)
+            pred_tree = torch.abs(tree.predict(X, check_input=False))
+            worst_pred = torch.max(pred_tree)
             self._leaves.append(worst_pred)
 
-            pred_tree = (pred_tree == worst_pred).astype(np.float32)
+            pred_tree = (pred_tree == worst_pred).astype(torch.float32)
             pred_tree = pred_tree.reshape(-1, 1)
-            X = np.concatenate([X, pred_tree], axis=1)
+            X = torch.concatenate([X, pred_tree], axis=1)
 
         self.base_estimator_ = deepcopy(self.base_estimator)
         self.base_estimator_.fit(X, y, sample_weight=sample_weight)
@@ -998,10 +1005,10 @@ class _LinearBoosting(TransformerMixin, BaseEstimator):
         )
 
         for tree, leaf in zip(self._trees, self._leaves):
-            pred_tree = np.abs(tree.predict(X, check_input=False))
-            pred_tree = (pred_tree == leaf).astype(np.float32)
+            pred_tree = torch.abs(tree.predict(X, check_input=False))
+            pred_tree = (pred_tree == leaf).astype(torch.float32)
             pred_tree = pred_tree.reshape(-1, 1)
-            X = np.concatenate([X, pred_tree], axis=1)
+            X = torch.concatenate([X, pred_tree], axis=1)
 
         return X
 
@@ -1047,7 +1054,7 @@ class _LinearForest(BaseEstimator):
         y : array-like of shape (n_samples, )
             Expits.
         """
-        return np.exp(y) / (1 + np.exp(y))
+        return torch.exp(y) / (1 + torch.exp(y))
 
     def _inv_sigmoid(self, y):
         """Logit function.
@@ -1064,7 +1071,7 @@ class _LinearForest(BaseEstimator):
         """
         y = y.clip(1e-3, 1 - 1e-3)
 
-        return np.log(y / (1 - y))
+        return torch.log(y / (1 - y))
 
     def _fit(self, X, y, sample_weight=None):
         """Build a Linear Boosting from the training set (X, y).
@@ -1094,7 +1101,7 @@ class _LinearForest(BaseEstimator):
 
         if hasattr(self, 'classes_'):
             class_to_int = dict(map(reversed, enumerate(self.classes_)))
-            y = np.array([class_to_int[i] for i in y])
+            y = torch.Tensor([class_to_int[i] for i in y])
             y = self._inv_sigmoid(y)
 
         self.base_estimator_ = deepcopy(self.base_estimator)

@@ -1,16 +1,17 @@
-import numpy as np
+# import numpy as np
+import torch
 
 
 SCORING = {
     'linear': lambda y, yh: y - yh,
-    'square': lambda y, yh: np.square(y - yh),
-    'absolute': lambda y, yh: np.abs(y - yh),
-    'square_logarithmic': lambda y, yh: np.square(np.log10(y.clip(1e-6) + 1) - np.log10(yh.clip(1e-6) + 1)),
-    'exponential': lambda y, yh: 1 - np.exp(-np.abs(y - yh)),
-    'poisson': lambda y, yh: yh.clip(1e-6) - y * np.log(yh.clip(1e-6)),
+    'square': lambda y, yh: torch.square(y - yh),
+    'absolute': lambda y, yh: torch.abs(y - yh),
+    'square_logarithmic': lambda y, yh: torch.square(torch.log10(y.clip(1e-6) + 1) - torch.log10(yh.clip(1e-6) + 1)),
+    'exponential': lambda y, yh: 1 - torch.exp(-torch.abs(y - yh)),
+    'poisson': lambda y, yh: yh.clip(1e-6) - y * torch.log(yh.clip(1e-6)),
     'hamming': lambda y, yh, classes: (y != yh).astype(int),
-    'entropy': lambda y, yh, classes: np.sum(list(map(
-        lambda c: -(y == c[1]).astype(int) * np.log(yh[:, c[0]]),
+    'entropy': lambda y, yh, classes: torch.sum(list(map(
+        lambda c: -(y == c[1]).astype(int) * torch.log(yh[:, c[0]]),
         enumerate(classes))), axis=0)
 }
 
@@ -21,7 +22,7 @@ def _normalize_score(scores, weights=None):
     if weights is None:
         return scores.mean()
     else:
-        return np.mean(np.dot(scores.T, weights) / weights.sum())
+        return torch.mean(torch.dot(scores.T, weights) / weights.sum())
 
 
 def mse(model, X, y, weights=None, **largs):
@@ -36,7 +37,7 @@ def mse(model, X, y, weights=None, **largs):
 def rmse(model, X, y, weights=None, **largs):
     """Root Mean Squared Error"""
 
-    return np.sqrt(mse(model, X, y, weights, **largs))
+    return torch.sqrt(mse(model, X, y, weights, **largs))
 
 
 def mae(model, X, y, weights=None, **largs):
@@ -59,7 +60,7 @@ def msle(model, X, y, weights=None, **largs):
 def poisson(model, X, y, weights=None, **largs):
     """Poisson Loss"""
 
-    if np.any(y < 0):
+    if torch.any(y < 0):
         raise ValueError("Some value(s) of y are negative which is"
                          " not allowed for Poisson regression.")
 
