@@ -1,5 +1,4 @@
 import numbers
-#import numpy as np
 import scipy.sparse as sp
 import torch
 
@@ -107,8 +106,8 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                 continue
 
             # create 2D bool mask for right/left children
-            left_mesh = ~mask #torch.ix_(~mask, _self._linear_features)
-            right_mesh = mask #torch.ix_(mask, _self._linear_features)
+            left_mesh = ~mask
+            right_mesh = mask
 
             model_left = deepcopy(_self.base_estimator)
             model_right = deepcopy(_self.base_estimator)
@@ -153,7 +152,7 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                                    weights=weights[mask], **largs_right)
                 wloss_right = loss_right * (weights[mask].sum() / weights.sum())
 
-            total_loss = wloss_left + wloss_right #torch.round(wloss_left + wloss_right, decimals=5)
+            total_loss = wloss_left + wloss_right
 
             # store if best
             if total_loss < loss:
@@ -448,7 +447,7 @@ class _LinearTree(BaseEstimator):
 
         return self
 
-    def _fit(self, X, y, sample_weight=None, live_printing=True):
+    def _fit(self, X, y, sample_weight=None):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -466,8 +465,6 @@ class _LinearTree(BaseEstimator):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
-        live_printing : bool, default=True
-            Print the number of leaves in the tree as the tree is being trained
 
         Returns
         -------
@@ -578,9 +575,6 @@ class _LinearTree(BaseEstimator):
         normalizer = torch.sum(self.feature_importances_)
         if normalizer > 0:
             self.feature_importances_ /= normalizer
-
-        if live_printing:
-            print(f'Current number of nodes: {len(self._nodes)} | Current number of leaves: {len(self._leaves)}')
 
         return self
 
@@ -745,7 +739,8 @@ class _LinearTree(BaseEstimator):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in,
+            cast_to_ndarray = False,
         )
 
         indicator = torch.zeros((X.shape[0], self.node_count), dtype='int64')
@@ -948,14 +943,14 @@ class _LinearBoosting(TransformerMixin, BaseEstimator):
                 ccp_alpha=self.ccp_alpha
             )
 
-            tree.fit(X, resid, sample_weight=sample_weight, check_input=False)
+            tree.fit(X.numpy(), resid, sample_weight=sample_weight, check_input=False)
             self._trees.append(tree)
 
-            pred_tree = torch.abs(tree.predict(X, check_input=False))
+            pred_tree = torch.abs(torch.Tensor(tree.predict(X.numpy(), check_input=False)))
             worst_pred = torch.max(pred_tree)
             self._leaves.append(worst_pred)
 
-            pred_tree = (pred_tree == worst_pred).astype(torch.float32)
+            pred_tree = (pred_tree == worst_pred).type(torch.float32)
             pred_tree = pred_tree.reshape(-1, 1)
             X = torch.concatenate([X, pred_tree], axis=1)
 
@@ -997,12 +992,13 @@ class _LinearBoosting(TransformerMixin, BaseEstimator):
             force_all_finite=True,
             ensure_2d=True,
             allow_nd=False,
-            ensure_min_features=self.n_features_in_
+            ensure_min_features=self.n_features_in_,
+            cast_to_ndarray = False,
         )
 
         for tree, leaf in zip(self._trees, self._leaves):
-            pred_tree = torch.abs(tree.predict(X, check_input=False))
-            pred_tree = (pred_tree == leaf).astype(torch.float32)
+            pred_tree = torch.abs(torch.Tensor(tree.predict(X.numpy(), check_input=False)))
+            pred_tree = (pred_tree == leaf).type(torch.float32)
             pred_tree = pred_tree.reshape(-1, 1)
             X = torch.concatenate([X, pred_tree], axis=1)
 

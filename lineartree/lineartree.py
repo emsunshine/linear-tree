@@ -1,7 +1,6 @@
 import copy
 import json
 
-# import numpy as np
 import torch
 
 from sklearn.base import ClassifierMixin, RegressorMixin
@@ -13,18 +12,23 @@ from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
 class TorchLinearRegression(LinearRegression):
-    def __init__(self, add_bias=True):
+    def __init__(self):
         super().__init__()
-        self.add_bias = add_bias
-    def fit(self, x, y):
+    def fit(self, x, y, sample_weight = None):
         if not isinstance(x, torch.Tensor):
             x = torch.Tensor(x)
-        if self.add_bias:
+        if self.fit_intercept:
             x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-        self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
+
+        if sample_weight is None:
+            self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
+        else:
+            self.params = torch.linalg.pinv(x.T @ sample_weight @ x) @ (x.T @ sample_weight @ y)
         
     def predict(self, x):
-        if self.add_bias:
+        if not isinstance(x, torch.Tensor):
+            x = torch.Tensor(x)
+        if self.fit_intercept:
             x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
         return x @ self.params
 
@@ -49,7 +53,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         The function to measure the quality of a split. "poisson"
         requires ``y >= 0``.
 
-    max_depth : int, default=5
+    max_depth : int, default=torch.inf
         The maximum depth of the tree considering only the splitting nodes.
         A higher value implies a higher training time.
 
@@ -142,7 +146,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
     >>> regr.predict([[0, 0, 0, 0]])
     array([8.8817842e-16])
     """
-    def __init__(self, *, base_estimator=TorchLinearRegression(), criterion='mse', max_depth=5,
+    def __init__(self, *, base_estimator=TorchLinearRegression(), criterion='mse', max_depth=torch.inf,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
                  split_features=None, linear_features=None, n_jobs=None):
@@ -159,7 +163,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         self.linear_features = linear_features
         self.n_jobs = n_jobs
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -175,9 +179,6 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
-            
-        live_printing : bool, default=True
-            Print the number of leaves while training
 
         Returns
         -------
@@ -210,7 +211,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         self.n_targets_ = y_shape[1] if len(y_shape) > 1 else 1
         if self.n_targets_ < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 
@@ -256,66 +257,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             pred[mask] = L.model.predict(X[mask])
 
         return pred
-
-    def write_to_json(self, filename):
-        """Write the model to a json file.
-
-        Parameters
-        ----------
-        filename : str
-            The path of the file to write.
-        """
-
-        out = copy.deepcopy(self.__dict__)
-
-        out['base_estimator'] = str(out['base_estimator'])
-        out['_categorical_features'] = [int(_) for _ in out['_categorical_features']]
-        out['_split_features'] = [int(_) for _ in out['_split_features']]
-        out['_categorical_features'] = [int(_) for _ in out['_categorical_features']]
-        out['feature_importances_'] = [float(_) for _ in out['feature_importances_']]
-        # out['linear_features'] = [int(x) for x in out['linear_features']]
-        out['_linear_features'] = [int(_) for _ in out['_linear_features']]
-
-        for key, value in self._nodes.items():
-            out['_nodes'][key] = copy.deepcopy(value.__dict__)
-
-            out['_nodes'][key]['loss'] = value.__dict__['loss'].item()
-            out['_nodes'][key]['n_samples'] = int(value.__dict__['n_samples'])
-
-            out['_nodes'][key]['model'] = value.__dict__['model'].__dict__
-            out['_nodes'][key]['model']['coef_'] = [float(_) for _ in out['_nodes'][key]['model']['coef_']]
-            out['_nodes'][key]['model']['intercept_'] = float(out['_nodes'][key]['model']['intercept_'])
-            out['_nodes'][key]['model']['singular_'] = [int(_) for _ in out['_nodes'][key]['model']['singular_']]
-            out['_nodes'][key]['model']['rank_'] = int(out['_nodes'][key]['model']['rank_'])
-            out['_nodes'][key]['model']['n_features_in_'] = int(out['_nodes'][key]['model']['n_features_in_'])
-            out['_nodes'][key]['model']['children'] = out['_nodes'][key]['model']['children']
-
-            if value.__dict__['w_loss'] is not None:
-                out['_nodes'][key]['w_loss'] = value.__dict__['w_loss'].item()
-
-            for i, threshold_tuple in enumerate(value.__dict__['threshold']):
-                out['_nodes'][key]['threshold'][i] = (threshold_tuple[0].item(), threshold_tuple[1], threshold_tuple[2].item())
-
-        for key, value in self._leaves.items():
-            out['_leaves'][key] = copy.deepcopy(value.__dict__)
-            out['_leaves'][key]['loss'] = value.__dict__['loss'].item()
-            out['_leaves'][key]['n_samples'] = int(value.__dict__['n_samples'])
-
-            out['_leaves'][key]['model'] = value.__dict__['model'].__dict__
-            out['_leaves'][key]['model']['coef_'] = [float(_) for _ in out['_leaves'][key]['model']['coef_']]
-            out['_leaves'][key]['model']['intercept_'] = float(out['_leaves'][key]['model']['intercept_'])
-            out['_leaves'][key]['model']['singular_'] = [int(_) for _ in out['_leaves'][key]['model']['singular_']]
-            out['_leaves'][key]['model']['rank_'] = int(out['_leaves'][key]['model']['rank_'])
-            out['_leaves'][key]['model']['n_features_in_'] = int(out['_leaves'][key]['model']['n_features_in_'])
-
-            if value.__dict__['w_loss'] is not None:
-                out['_leaves'][key]['w_loss'] = value.__dict__['w_loss'].item()
-
-            for i, threshold_tuple in enumerate(value.__dict__['threshold']):
-                out['_leaves'][key]['threshold'][i] = (threshold_tuple[0].item(), threshold_tuple[1], threshold_tuple[2].item())
-
-        with open(filename, 'w') as outfile:
-            json.dump(out, outfile)
+    
 
 class LinearTreeClassifier(_LinearTree, ClassifierMixin):
     """A Linear Tree Classifier.
@@ -341,7 +283,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
         The function to measure the quality of a split. `"crossentropy"`
         can be used only if `base_estimator` has `predict_proba` method.
 
-    max_depth : int, default=5
+    max_depth : int, default=torch.inf
         The maximum depth of the tree considering only the splitting nodes.
         A higher value implies a higher training time.
 
@@ -434,7 +376,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
     >>> clf.predict([[0, 0, 0, 0]])
     array([1])
     """
-    def __init__(self, base_estimator, *, criterion='hamming', max_depth=5,
+    def __init__(self, base_estimator=TorchLinearRegression(), *, criterion='hamming', max_depth=torch.inf,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
                  split_features=None, linear_features=None, n_jobs=None):
@@ -451,7 +393,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
         self.linear_features = linear_features
         self.n_jobs = n_jobs
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Tree of a linear estimator from the training
         set (X, y).
 
@@ -467,9 +409,6 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             Sample weights. If None, then samples are equally weighted.
             Note that if the base estimator does not support sample weighting,
             the sample weights are still used to evaluate the splits.
-            
-        live_printing : bool, default=True
-            Print the number of leaves while training
             
         Returns
         -------
@@ -502,7 +441,7 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
             sample_weight = _check_sample_weight(sample_weight, X)
 
         self.classes_ = torch.unique(y)
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 
@@ -742,7 +681,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
     Authors: Igor Ilic, Berk Gorgulu, Mucahit Cevik, Mustafa Gokce Baydogan.
     (https://arxiv.org/abs/2009.09110)
     """
-    def __init__(self, base_estimator, *, loss='linear', n_estimators=10,
+    def __init__(self, base_estimator=TorchLinearRegression(), *, loss='linear', n_estimators=10,
                  max_depth=3, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_features=None,
                  random_state=None, max_leaf_nodes=None,
@@ -761,7 +700,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         self.min_impurity_decrease = min_impurity_decrease
         self.ccp_alpha = ccp_alpha
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Boosting from the training set (X, y).
 
         Parameters
@@ -774,9 +713,6 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
-            
-        live_printing : bool, default=True
-            Print the number of leaves while training
             
         Returns
         -------
@@ -808,7 +744,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 
@@ -828,7 +764,7 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         """
         check_is_fitted(self, attributes='base_estimator_')
 
-        return self.base_estimator_.predict(self.transform(X))
+        return self.base_estimator_.predict(self.transform(X).numpy())
 
 
 class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
@@ -959,7 +895,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
     Authors: Igor Ilic, Berk Gorgulu, Mucahit Cevik, Mustafa Gokce Baydogan.
     (https://arxiv.org/abs/2009.09110)
     """
-    def __init__(self, base_estimator, *, loss='hamming', n_estimators=10,
+    def __init__(self, base_estimator=TorchLinearRegression(), *, loss='hamming', n_estimators=10,
                  max_depth=3, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_features=None,
                  random_state=None, max_leaf_nodes=None,
@@ -978,7 +914,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
         self.min_impurity_decrease = min_impurity_decrease
         self.ccp_alpha = ccp_alpha
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Boosting from the training set (X, y).
 
         Parameters
@@ -991,9 +927,6 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
-
-        live_printing : bool, default=True
-            Print the number of leaves while training
 
         Returns
         -------
@@ -1026,7 +959,7 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
             sample_weight = _check_sample_weight(sample_weight, X)
 
         self.classes_ = torch.unique(y)
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 
@@ -1255,7 +1188,7 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
     Authors: Haozhe Zhang, Dan Nettleton, Zhengyuan Zhu.
     (https://arxiv.org/abs/1904.10416)
     """
-    def __init__(self, base_estimator, *, n_estimators=100,
+    def __init__(self, base_estimator=TorchLinearRegression(), *, n_estimators=100,
                  max_depth=None, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0., max_features="auto",
                  max_leaf_nodes=None, min_impurity_decrease=0.,
@@ -1278,7 +1211,7 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
         self.ccp_alpha = ccp_alpha
         self.max_samples = max_samples
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Forest from the training set (X, y).
 
         Parameters
@@ -1291,9 +1224,6 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
-
-        live_printing : bool, default=True
-            Print the number of leaves while training
 
         Returns
         -------
@@ -1319,7 +1249,7 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
         n_targets = y_shape[1] if len(y_shape) > 1 else 1
         if n_targets < 2:
             y = y.ravel()
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 
@@ -1523,7 +1453,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
     Authors: Haozhe Zhang, Dan Nettleton, Zhengyuan Zhu.
     (https://arxiv.org/abs/1904.10416)
     """
-    def __init__(self, base_estimator, *, n_estimators=100,
+    def __init__(self, base_estimator=TorchLinearRegression(), *, n_estimators=100,
                  max_depth=None, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0., max_features="auto",
                  max_leaf_nodes=None, min_impurity_decrease=0.,
@@ -1546,7 +1476,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
         self.ccp_alpha = ccp_alpha
         self.max_samples = max_samples
 
-    def fit(self, X, y, sample_weight=None, live_printing=True):
+    def fit(self, X, y, sample_weight=None):
         """Build a Linear Forest from the training set (X, y).
 
         Parameters
@@ -1559,9 +1489,6 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
 
         sample_weight : array-like of shape (n_samples, ), default=None
             Sample weights.
-
-        live_printing : bool, default=True
-            Print the number of leaves while training
 
         Returns
         -------
@@ -1589,7 +1516,7 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
                 "To solve a multi-lable classification task use "
                 "LinearForestClassifier with OneVsRestClassifier from sklearn.")
 
-        self._fit(X, y, sample_weight, live_printing=live_printing)
+        self._fit(X, y, sample_weight)
 
         return self
 

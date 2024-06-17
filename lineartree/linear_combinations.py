@@ -1,5 +1,6 @@
 import torch
 import itertools
+import typing
 
 from sklearn.base import TransformerMixin, BaseEstimator
 
@@ -33,6 +34,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
                  symmetrize = True,
                  tol_decimals = 4,
                  torch_device = None,
+                 max_index = None,
                  ):
         
         if LCs is not None:
@@ -45,10 +47,12 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             torch_device = 'cpu'
 
         if LCs is None and num_terms is None:
-            self.num_terms = 2
+            num_terms = 2
 
         if LCs is None:
-            LCs = torch.ones((1, num_terms), device = torch_device)
+            if max_index is None:
+                max_index = 3
+            LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index)
 
         if num_terms is None:
             num_terms = len(LCs[0])
@@ -120,3 +124,54 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
 
             self.final_matrix = self.final_matrix.T.type(X.dtype)
         return X @ self.final_matrix
+    
+def generate_angular_lcs_2d(divisions, device = 'cpu'):
+    """
+    Generate 2-dimensional linear combinations with equal angle spacing
+
+    Arguments:
+
+        divisions (int): How many lines in each quadrant
+    """
+    assert divisions >= 1
+
+    spacing = torch.Tensor([[torch.sin(x), torch.cos(x)] for x in torch.linspace(0, torch.pi/2, divisions+2)])[1:-1]
+    spacing = (spacing.T / spacing[:,0]).T.to(device)
+    return spacing
+
+def generate_planes_to_index(
+        dimension: int, 
+        max_index: int=3,
+        device = 'cpu',
+        tol_decimals: int=4):
+    """
+    Generate higher-dimensional hyperplanes based on Miller index-like system
+
+    Automatically reduces degenerate weight combinations.
+    Automatically normalizes so the highest magnitude weight is 1
+    Does not produce negative weights.
+
+    Arguments:
+        dimension (int): How many terms you want in your linear combinations
+
+        max_index (int): Highest possible index plane to generate
+
+    Example
+        dimension = 2, max_index = 3 ==>
+
+        [
+            [1.0000, 0.0000], # (1, 0) plane
+            [1.0000, 0.3333], # (3, 1) plane
+            [1.0000, 0.5000], # (2, 1) plane
+            [1.0000, 0.6667], # (3, 2) plane
+            [1.0000, 1.0000], # (1, 1) plane
+        ]
+    
+    """
+
+    out = itertools.combinations_with_replacement(range(max_index, -1 , -1), dimension)
+    out = torch.Tensor(list(out), device = device)[:-1]
+    out = (out.T / out[:, 0]).T
+    out.round(decimals = tol_decimals)
+    out = torch.unique(out, dim = 0)
+    return out
