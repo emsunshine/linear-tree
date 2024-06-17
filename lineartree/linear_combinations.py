@@ -52,7 +52,12 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
         if LCs is None:
             if max_index is None:
                 max_index = 3
-            LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index)
+
+            if max_index == 0:
+                LCs = torch.eye(num_terms, device = torch_device)
+
+            else:
+                LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index)
 
         if num_terms is None:
             num_terms = len(LCs[0])

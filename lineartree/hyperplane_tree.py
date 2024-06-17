@@ -38,11 +38,12 @@ class HyperplaneMixin():
         self.max_index = max_index
 
         self.linear_combinations_transform = LinearCombinations(
-            LCs,
-            num_terms,
-            symmetrize,
-            tol_decimals,
-            torch_device
+            LCs = LCs,
+            num_terms = num_terms,
+            symmetrize = symmetrize,
+            tol_decimals = tol_decimals,
+            torch_device = torch_device,
+            max_index = max_index,
         )
 
     def do_lcs(self, X):
