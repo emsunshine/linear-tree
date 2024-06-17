@@ -509,11 +509,11 @@ class _LinearTree(BaseEstimator):
             self._min_samples_leaf = torch.ceil(torch.tensor([self.min_samples_leaf * n_sample], device = X.device)).type(torch.int)
             self._min_samples_leaf = torch.max(torch.tensor([3], device=X.device), self._min_samples_leaf)
 
-        if not 1 <= self.max_depth <= 20:
-            raise ValueError("max_depth must be an integer in [1, 20].")
+        if not 1 <= self.max_depth:
+            raise ValueError("max_depth must be an integer greater than or equal to 1.")
 
-        if not 3 <= self.max_bins <= 120:
-            raise ValueError("max_bins must be an integer in [3, 120].")
+        if not 3 <= self.max_bins:
+            raise ValueError("max_bins must be an integer greater than or equal to 3.")
 
         if self.categorical_features is not None:
             cat_features = torch.unique(self.categorical_features)
@@ -534,6 +534,7 @@ class _LinearTree(BaseEstimator):
                     "No features available for fitting.")
         else:
             cat_features = []
+        cat_features = torch.Tensor(cat_features, device = X.device)
         self._categorical_features = cat_features
 
         if self.split_features is not None:
@@ -553,12 +554,9 @@ class _LinearTree(BaseEstimator):
         self._split_features = split_features
 
         if self.linear_features is not None:
-            linear_features = torch.unique(self.linear_features)
+            assert type(self.linear_features) == torch.Tensor
 
-            if not issubclass(linear_features.dtype.type, numbers.Integral):
-                raise ValueError(
-                    "No valid specification of linear_features. "
-                    "Only a scalar, list or array-like of integers is allowed.")
+            linear_features = torch.unique(self.linear_features)
 
             if (linear_features < 0).any() or (linear_features >= n_feat).any():
                 raise ValueError(
@@ -570,7 +568,7 @@ class _LinearTree(BaseEstimator):
                     "Linear features cannot be categorical features.")
         else:
             # linear_features = torch.setdiff1d(torch.arange(n_feat), cat_features)
-            combined = torch.cat((torch.arange(n_feat, device = X.device), torch.tensor(cat_features, device = X.device)))
+            combined = torch.cat((torch.arange(n_feat, device = X.device), cat_features))
             uniques, counts = combined.unique(return_counts=True)
             linear_features = uniques[counts == 1].type(torch.int)
         self._linear_features = linear_features
