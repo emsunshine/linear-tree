@@ -1,7 +1,7 @@
 import copy
 import json
 
-from lineartree import (
+from .lineartree import (
     LinearTreeRegressor,
     LinearTreeClassifier,
     LinearBoostRegressor,

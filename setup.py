@@ -3,11 +3,11 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.3.5'
-PACKAGE_NAME = 'linear-tree'
-AUTHOR = 'Marco Cerliani'
-AUTHOR_EMAIL = 'cerlymarco@gmail.com'
-URL = 'https://github.com/cerlymarco/linear-tree'
+VERSION = '0.5'
+PACKAGE_NAME = 'hyperplane-tree'
+AUTHOR = 'Ethan Sunshine'
+AUTHOR_EMAIL = 'esunshin@andrew.cmu.edu'
+URL = 'https://github.com/emsunshine/linear-tree'
 
 LICENSE = 'MIT'
 DESCRIPTION = 'A python library to build Model Trees with Linear Models at the leaves.'
@@ -16,8 +16,9 @@ LONG_DESC_TYPE = "text/markdown"
 
 INSTALL_REQUIRES = [
     'scikit-learn>=0.24.2',
-    'numpy',
-    'scipy'
+    'torch',
+    'scipy',
+    'numpy'
 ]
 
 setup(name=PACKAGE_NAME,
