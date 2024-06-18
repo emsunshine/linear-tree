@@ -57,7 +57,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
                 LCs = torch.eye(num_terms, device = torch_device)
 
             else:
-                LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index)
+                LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index, device = torch_device)
 
         if num_terms is None:
             num_terms = len(LCs[0])
@@ -67,12 +67,12 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
 
         if symmetrize:
             # Symmetrize +/- parity
-            parity_matrix = torch.Tensor(tuple(itertools.product([1, -1], repeat = num_terms)), device = torch_device)
+            parity_matrix = torch.Tensor(tuple(itertools.product([1, -1], repeat = num_terms))).to(torch_device)
             parity_matrix = parity_matrix[:, None, :]
             LCs = torch.reshape(LCs * parity_matrix, (-1, num_terms))
 
             # Symmetrize permutations
-            permutations_matrix = torch.Tensor(tuple((itertools.permutations(range(num_terms)))), device = torch_device).type(torch.int)
+            permutations_matrix = torch.Tensor(tuple((itertools.permutations(range(num_terms))))).to(torch_device).type(torch.int)
             LCs = torch.reshape(LCs[:, permutations_matrix], (-1, num_terms))
 
             # Remove LCs with non-trailing zeros
@@ -88,7 +88,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             LCs = (LCs.T / LCs[:, 0]).T
 
             # Only take unique LCs
-            LCs = torch.unique(torch.round(LCs, decimals=tol_decimals), dim=0)
+            LCs = torch.unique(torch.round(LCs.to('cpu'), decimals=tol_decimals), dim=0).to(torch_device)
 
         self.LCs = LCs
         self.symmetrize = symmetrize
@@ -121,7 +121,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             final_matrix = (final_matrix.T / leftmost_nonzero).T
 
             # take only unique rows in final matrix
-            final_matrix = torch.unique(torch.round(final_matrix[num_cols:], decimals=self.tol_decimals), dim=0)
+            final_matrix = torch.unique(torch.round(final_matrix[num_cols:].to('cpu'), decimals=self.tol_decimals), dim=0).to(X.device)
 
             self.final_matrix = torch.zeros((num_cols+len(final_matrix), num_cols), device = X.device)
             self.final_matrix[:num_cols] = torch.eye(num_cols, device = X.device)
@@ -175,8 +175,8 @@ def generate_planes_to_index(
     """
 
     out = itertools.combinations_with_replacement(range(max_index, -1 , -1), dimension)
-    out = torch.Tensor(list(out), device = device)[:-1]
+    out = torch.Tensor(list(out))[:-1]
     out = (out.T / out[:, 0]).T
     out.round(decimals = tol_decimals)
-    out = torch.unique(out, dim = 0)
+    out = torch.unique(out, dim = 0).to(device)
     return out

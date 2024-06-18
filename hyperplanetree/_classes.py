@@ -531,10 +531,10 @@ class _LinearTree(BaseEstimator):
                     "No features available for fitting.")
         else:
             cat_features = []
-        cat_features = torch.Tensor(cat_features, device = X.device)
+        cat_features = torch.Tensor(cat_features).to(X.device)
         self._categorical_features = cat_features
 
-        if self.split_features is not None:
+        if self.split_features is not None: 
             split_features = torch.unique(self.split_features)
 
             if not issubclass(split_features.dtype.type, numbers.Integral):
