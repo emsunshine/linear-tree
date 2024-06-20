@@ -34,7 +34,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
                  symmetrize = True,
                  tol_decimals = 4,
                  torch_device = None,
-                 max_index = None,
+                 max_hp_weight = None,
                  ):
         
         if LCs is not None:
@@ -50,14 +50,14 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             num_terms = 2
 
         if LCs is None:
-            if max_index is None:
-                max_index = 3
+            if max_hp_weight is None:
+                max_hp_weight = 3
 
-            if max_index == 0:
+            if max_hp_weight == 0:
                 LCs = torch.eye(num_terms, device = torch_device)
 
             else:
-                LCs = generate_planes_to_index(dimension = num_terms, max_index = max_index, device = torch_device)
+                LCs = generate_planes_to_index(dimension = num_terms, max_hp_weight = max_hp_weight, device = torch_device)
 
         if num_terms is None:
             num_terms = len(LCs[0])
@@ -101,6 +101,9 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X):
+        if not isinstance(X, torch.Tensor):
+            X = torch.tensor(X)
+            
         if (self.final_matrix is None) or (X.shape[1] != len(self.final_matrix)):
 
             num_cols = X.shape[1]
@@ -130,13 +133,25 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             self.final_matrix = self.final_matrix.T.type(X.dtype)
         return X @ self.final_matrix
     
-def generate_angular_lcs_2d(divisions, device = 'cpu'):
-    """
-    Generate 2-dimensional linear combinations with equal angle spacing
+def generate_angular_lcs_2d(
+        divisions,
+        device = 'cpu'
+        ):
+    """Generate lines in two dimensions with equal angle spacing
 
-    Arguments:
+    Parameters
+    ----------
+        divisions : int, 1 or greater
+            How many lines in each quadrant
 
-        divisions (int): How many lines in each quadrant
+        device : torch.device or str
+            device where the tensor will be created
+
+    Returns
+    -------
+    spacing : torch.Tensor 
+        intended to be used as hyperplane_weights when initializing a tree
+    
     """
     assert divisions >= 1
 
@@ -146,35 +161,48 @@ def generate_angular_lcs_2d(divisions, device = 'cpu'):
 
 def generate_planes_to_index(
         dimension: int, 
-        max_index: int=3,
+        max_hp_weight: int=3,
         device = 'cpu',
-        tol_decimals: int=4):
-    """
-    Generate higher-dimensional hyperplanes based on Miller index-like system
+        tol_decimals: int=4
+        ):
+    """Generate hyperplanes based on Miller index-like system
 
+    Generates all possible planes with integer weights up to
+    and including the specified max.
     Automatically reduces degenerate weight combinations.
-    Automatically normalizes so the highest magnitude weight is 1
+    Automatically normalizes so the highest magnitude weight is 1.
     Does not produce negative weights.
+    It is highly recommended to use this with "symmetrize" set to True
+    in your tree initialization arguments to obtain all symmetries.
 
-    Arguments:
-        dimension (int): How many terms you want in your linear combinations
+    Parameters
+    ----------
+    dimension : int
+        How many terms you want in your linear combinations
 
-        max_index (int): Highest possible index plane to generate
+    max_hp_weight : int
+        Highest possible weight in the generated planes
+
+    Returns
+    -------
+    out : torch.Tensor 
+        intended to be used as hyperplane_weights when initializing a tree
 
     Example
-        dimension = 2, max_index = 3 ==>
+    -------
+    dimension = 2, max_index = 3 ==>
 
-        [
-            [1.0000, 0.0000], # (1, 0) plane
-            [1.0000, 0.3333], # (3, 1) plane
-            [1.0000, 0.5000], # (2, 1) plane
-            [1.0000, 0.6667], # (3, 2) plane
-            [1.0000, 1.0000], # (1, 1) plane
-        ]
+    [
+        [1.0000, 0.0000], # (1, 0) plane
+        [1.0000, 0.3333], # (3, 1) plane
+        [1.0000, 0.5000], # (2, 1) plane
+        [1.0000, 0.6667], # (3, 2) plane
+        [1.0000, 1.0000], # (1, 1) plane
+    ]
     
     """
 
-    out = itertools.combinations_with_replacement(range(max_index, -1 , -1), dimension)
+    out = itertools.combinations_with_replacement(range(max_hp_weight, -1 , -1), dimension)
     out = torch.Tensor(list(out))[:-1]
     out = (out.T / out[:, 0]).T
     out.round(decimals = tol_decimals)
