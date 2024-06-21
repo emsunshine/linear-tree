@@ -100,14 +100,12 @@ def _parallel_binning_fit(split_feat, _self, X, y,
 
             # create 1D bool mask for right/left children
             mask = (X[:, col] > q)
-
             n_left, n_right = (~mask).sum(), mask.sum()
             if n_left < _self._min_samples_leaf or n_right < _self._min_samples_leaf:
                 continue
 
-            # create 2D bool mask for right/left children
-            left_mesh = ~mask
-            right_mesh = mask
+            X_left = X[~mask][:, _self._linear_features]
+            X_right = X[mask][:, _self._linear_features]
 
             model_left = deepcopy(_self.base_estimator)
             model_right = deepcopy(_self.base_estimator)
@@ -121,34 +119,32 @@ def _parallel_binning_fit(split_feat, _self, X, y,
                     model_right = DummyClassifier(strategy="most_frequent")
 
             if weights is None:
-                model_left.fit(X[left_mesh], y[~mask])
-                loss_left = feval(model_left, X[left_mesh], y[~mask],
+                model_left.fit(X_left, y[~mask])
+                loss_left = feval(model_left, X_left, y[~mask],
                                   **largs_left)
                 wloss_left = loss_left * (n_left / n_sample)
 
-                model_right.fit(X[right_mesh], y[mask])
-                loss_right = feval(model_right, X[right_mesh], y[mask],
+                model_right.fit(X_right, y[mask])
+                loss_right = feval(model_right, X_right, y[mask],
                                    **largs_right)
                 wloss_right = loss_right * (n_right / n_sample)
 
             else:
                 if support_sample_weight:
-                    model_left.fit(X[left_mesh], y[~mask],
-                                   sample_weight=weights[~mask])
+                    model_left.fit(X_left, y[~mask],sample_weight=weights[~mask])
 
-                    model_right.fit(X[right_mesh], y[mask],
-                                    sample_weight=weights[mask])
+                    model_right.fit(X_right, y[mask],sample_weight=weights[mask])
 
                 else:
-                    model_left.fit(X[left_mesh], y[~mask])
+                    model_left.fit(X_left, y[~mask])
 
-                    model_right.fit(X[right_mesh], y[mask])
+                    model_right.fit(X_right, y[mask])
 
-                loss_left = feval(model_left, X[left_mesh], y[~mask],
+                loss_left = feval(model_left, X_left, y[~mask],
                                   weights=weights[~mask], **largs_left)
                 wloss_left = loss_left * (weights[~mask].sum() / weights.sum())
 
-                loss_right = feval(model_right, X[right_mesh], y[mask],
+                loss_right = feval(model_right, X_right, y[mask],
                                    weights=weights[mask], **largs_right)
                 wloss_right = loss_right * (weights[mask].sum() / weights.sum())
 
@@ -364,7 +360,6 @@ class _LinearTree(BaseEstimator):
         loss = CRITERIA[self.criterion](
             model, X[:, self._linear_features], y,
             weights=weights, **largs)
-        # loss = torch.round(loss, decimals=5)
 
         self._nodes[''] = Node(
             id=0,

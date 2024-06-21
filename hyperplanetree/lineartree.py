@@ -11,26 +11,7 @@ from ._classes import Node
 from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
-class TorchLinearRegression(LinearRegression):
-    def __init__(self):
-        super().__init__()
-    def fit(self, x, y, sample_weight = None):
-        if not isinstance(x, torch.Tensor):
-            x = torch.Tensor(x)
-        if self.fit_intercept:
-            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-
-        if sample_weight is None:
-            self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
-        else:
-            self.params = torch.linalg.pinv(x.T @ sample_weight @ x) @ (x.T @ sample_weight @ y)
-        
-    def predict(self, x):
-        if not isinstance(x, torch.Tensor):
-            x = torch.Tensor(x)
-        if self.fit_intercept:
-            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-        return x @ self.params
+from .linear_combinations import TorchLinearRegression
 
 class LinearTreeRegressor(_LinearTree, RegressorMixin):
     """A Linear Tree Regressor.
@@ -146,12 +127,12 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
     >>> regr.predict([[0, 0, 0, 0]])
     array([8.8817842e-16])
     """
-    def __init__(self, *, base_estimator=TorchLinearRegression(), criterion='mse', max_depth=torch.inf,
+    def __init__(self, *, criterion='mse', max_depth=torch.inf,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
                  split_features=None, linear_features=None, n_jobs=None):
 
-        self.base_estimator = base_estimator
+        self.base_estimator = TorchLinearRegression()
         self.criterion = criterion
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
@@ -254,7 +235,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
             if (~mask).all():
                 continue
 
-            pred[mask] = L.model.predict(X[mask])
+            pred[mask] = L.model.predict(X[mask][:, self._linear_features])
 
         return pred
     

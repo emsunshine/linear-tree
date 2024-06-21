@@ -25,7 +25,8 @@ class HyperplaneMixin():
     """Automatically take hyperplanes of features
     
     A Mixin for sklearn-like models to automatically take hyperplanes of features
-    before doing anything with them.
+    before doing anything with them. The implemented functions should cover most
+    sklearn-like models.
 
     Parameters
     ----------
@@ -84,7 +85,7 @@ class HyperplaneMixin():
     
     def fit(self, X, y, *args):
         if self.linear_features is None:
-            self.linear_features = torch.range(len(X[0]), device = self.torch_device)
+            self.linear_features = torch.arange(start = 0, end=len(X[0]), device = self.torch_device, dtype = torch.int)
 
         X = self.do_lcs(X)
         return super().fit(X, y, *args)
@@ -112,6 +113,10 @@ class HyperplaneMixin():
     def decision_function(self, X, *args):
         X = self.do_lcs(X)
         return super().decision_function(X, *args)
+    
+    def score(self, X, *args):
+        X = self.do_lcs(X)
+        return super().score(X, *args)
     
     def write_to_json(self, filename):
         out = copy.deepcopy(super().summary())
