@@ -634,8 +634,6 @@ class _LinearTree(BaseEstimator):
 
             for n, N in self._nodes.items():
 
-                if len(n) >= max_depth:
-                    continue
 
                 cl, cr = N.children
                 Cl = (self._nodes[cl] if cl in self._nodes
@@ -646,7 +644,7 @@ class _LinearTree(BaseEstimator):
                 summary[N.id] = {
                     'col': feature_names[Cl.threshold[-1][0]],
                     'th': Cl.threshold[-1][-1], #torch.round(Cl.threshold[-1][-1], decimals=5),
-                    'loss': Cl.w_loss + Cr.w_loss, #torch.round(Cl.w_loss + Cr.w_loss, decimals=5),
+                    'loss': N.loss,
                     'samples': Cl.n_samples + Cr.n_samples,
                     'children': (Cl.id, Cr.id),
                     'models': (Cl.model, Cr.model)
@@ -654,8 +652,6 @@ class _LinearTree(BaseEstimator):
 
         for l, L in self._leaves.items():
 
-            if len(l) > max_depth:
-                continue
 
             summary[L.id] = {
                 'loss': L.loss, #torch.round(L.loss, decimals=5),

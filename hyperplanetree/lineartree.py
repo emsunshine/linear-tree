@@ -1,17 +1,12 @@
-import copy
-import json
-
 import torch
 
 from sklearn.base import ClassifierMixin, RegressorMixin
 from sklearn.utils.validation import check_is_fitted, _check_sample_weight
-from sklearn.linear_model import LinearRegression
 
-from ._classes import Node
 from ._classes import _predict_branch
 from ._classes import _LinearTree, _LinearBoosting, _LinearForest
 
-from .linear_combinations import TorchLinearRegression
+from .utils import TorchLinearRegression
 
 class LinearTreeRegressor(_LinearTree, RegressorMixin):
     """A Linear Tree Regressor.
@@ -1595,86 +1590,3 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
             classes corresponds to that in the attribute :term:`classes_`.
         """
         return torch.log(self.predict_proba(X))
-
-def tree_from_json(filename):
-    """Load a tree from a json file.
-
-    Parameters
-    ----------
-    filename : str
-        The path to the json file.
-
-    Returns
-    -------
-    tree : dict
-        The tree in a dictionary format.
-    """
-    params = json.load(open(filename, 'r'))
-
-    if params['base_estimator'] == 'LinearRegression()':
-        params['base_estimator'] = TorchLinearRegression()
-    else:
-        raise Exception(f'base_estimator {params["base_estimator"]} not supported')
-
-
-
-    for key, value in params['_nodes'].items():
-        node = Node(
-            id = value['id'],
-            parent = value['parent'],
-            model = type(params['base_estimator'])(),
-            loss = value['loss'],
-            n_samples = value['n_samples'],
-            w_loss = value['w_loss'],
-            threshold = value['threshold'],
-            classes = value['classes'],
-            children = value['children'],
-        )
-
-        node.model.coef_ = torch.Tensor(value['model']['coef_'])
-        node.model.intercept_ = value['model']['intercept_']
-        node.model.singular_ = torch.Tensor(value['model']['singular_'])
-        node.model.rank_ = value['model']['rank_']
-        node.model.n_features_in_ = value['model']['n_features_in_']
-
-        params['_nodes'][key] = node
-
-    for key, value in params['_leaves'].items():
-        node = Node(
-            id = value['id'],
-            parent = value['parent'],
-            model = type(params['base_estimator'])(),
-            loss = value['loss'],
-            n_samples = value['n_samples'],
-            w_loss = value['w_loss'],
-            threshold = value['threshold'],
-            classes = value['classes'],
-        )
-
-        node.model.coef_ = torch.Tensor(value['model']['coef_'])
-        node.model.intercept_ = value['model']['intercept_']
-        node.model.singular_ = torch.Tensor(value['model']['singular_'])
-        node.model.rank_ = value['model']['rank_']
-        node.model.n_features_in_ = value['model']['n_features_in_']
-
-        params['_leaves'][key] = node
-
-    tree = LinearTreeRegressor(
-        base_estimator = params['base_estimator'],
-        criterion = params['criterion'],
-        max_depth = params['max_depth'],
-        min_samples_leaf = params['min_samples_leaf'],
-        categorical_features = params['_categorical_features'],
-        linear_features = params['_linear_features'],
-        split_features = params['_split_features'],
-        )
-
-    tree.n_features_in_ = params['n_features_in_']
-    tree.n_targets_ = params['n_targets_']
-    tree.feature_importances_ = params['feature_importances_']
-    tree._linear_features = params['_linear_features']
-        
-    tree._nodes = params['_nodes']
-    tree._leaves = params['_leaves']
-
-    return tree

@@ -2,6 +2,8 @@ import copy
 import json
 import torch
 
+from .utils import recursive_to_device
+
 from .lineartree import (
     LinearTreeRegressor,
     LinearTreeClassifier,
@@ -119,29 +121,43 @@ class HyperplaneMixin():
         return super().score(X, *args)
     
     def write_to_json(self, filename):
-        out = copy.deepcopy(super().summary())
+        out = {}
+        out['nodes'] = copy.deepcopy(super().summary())
 
-        for key, node in out.items():
+        for key, node in out['nodes'].items():
             if 'col' in node.keys():
+                #Splitting node
                 node['col'] = node['col'].item()
                 node['th'] = node['th'].item()
-
-                node['models'] = [linear_model.__dict__ for linear_model in node['models']]
-                for linear_model in node['models']:
-                    linear_model['params'] = linear_model['params'].tolist()
+                del node['models']
 
             else:
-                node['models'] = node['models'].__dict__
+                #leaf node
+                node['model'] = node['models'].__dict__
+                node['model']['params'] = node['model']['params'].to('cpu').tolist()
+                del node['models']
 
             node['loss'] = node['loss'].item()
             node['samples'] = node['samples'].item()
 
     
-        out['LC_matrix'] = self.linear_combinations_transform.final_matrix.tolist()
+        out['hyperplanes_final_matrix'] = self.linear_combinations_transform.final_matrix.to('cpu').tolist()
         out['type'] = str(super())[36:-9]
+        out['categorical_features'] = self._categorical_features.to('cpu').tolist()
+        out['linear_features'] = self._linear_features.to('cpu').tolist()
+        out['split_features'] = self._split_features.to('cpu').tolist()
+        out['criterion'] = self.criterion
+        out['max_depth'] = self.max_depth
+        out['min_samples_leaf'] = self.min_samples_leaf
+        out['n_features_in'] = self.n_features_in_
+        out['n_targets'] = self.n_targets_
 
         with open(filename, 'w') as outfile:
             json.dump(out, outfile)
+
+    def to(self, device):
+        self.torch_device = device
+        return recursive_to_device(self, device)
         
 
 class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):

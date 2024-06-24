@@ -3,28 +3,8 @@ import itertools
 import typing
 
 from sklearn.base import TransformerMixin, BaseEstimator
-from sklearn.linear_model import LinearRegression
 
-class TorchLinearRegression(LinearRegression):
-    def __init__(self):
-        super().__init__()
-    def fit(self, x, y, sample_weight = None):
-        if not isinstance(x, torch.Tensor):
-            x = torch.Tensor(x)
-        if self.fit_intercept:
-            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-
-        if sample_weight is None:
-            self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
-        else:
-            self.params = torch.linalg.pinv(x.T @ sample_weight @ x) @ (x.T @ sample_weight @ y)
-
-    def predict(self, x):
-        if not isinstance(x, torch.Tensor):
-            x = torch.Tensor(x)
-        if self.fit_intercept:
-            x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
-        return x @ self.params
+from .utils import recursive_to_device
 
 class LinearCombinations(TransformerMixin, BaseEstimator):
     """SKLearn transformer for finite number of linear combinations
@@ -112,12 +92,14 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             # Only take unique LCs
             LCs = torch.unique(torch.round(LCs.to('cpu'), decimals=tol_decimals), dim=0).to(torch_device)
 
+        self.final_matrix = None
+
         self.LCs = LCs
         self.symmetrize = symmetrize
         self.num_terms = num_terms
         self.tol_decimals = tol_decimals
         self.torch_device = torch_device
-        self.final_matrix = None
+        self.max_hp_weight = max_hp_weight
 
     def fit(self, X, y=None):
         return self
@@ -154,6 +136,10 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
 
             self.final_matrix = self.final_matrix.T.type(X.dtype)
         return X @ self.final_matrix
+    
+    def to(self, device):
+        return recursive_to_device(self, device)
+
     
 def generate_angular_lcs_2d(
         divisions,
