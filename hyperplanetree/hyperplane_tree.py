@@ -14,15 +14,6 @@ from .lineartree import (
 )
 from .linear_combinations import LinearCombinations
 
-default_args = {
-    'LCs': None,
-    'num_terms': None,
-    'symmetrize': True,
-    'tol_decimals': 4,
-    'torch_device': None,
-    'max_index': None,
-}
-
 class HyperplaneMixin():
     """Automatically take hyperplanes of features
     
@@ -38,7 +29,7 @@ class HyperplaneMixin():
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -61,14 +52,14 @@ class HyperplaneMixin():
             self,
             hyperplane_weights,
             num_terms,
-            symmetrize,
+            do_symmetrize,
             tol_decimals,
             torch_device,
             max_hp_weight,
             ):
         self.hyperplane_weights = hyperplane_weights
         self.num_terms = num_terms
-        self.symmetrize = symmetrize
+        self.do_symmetrize = do_symmetrize
         self.tol_decimals = tol_decimals
         self.torch_device = torch_device
         self.max_hp_weight = max_hp_weight
@@ -76,7 +67,7 @@ class HyperplaneMixin():
         self.linear_combinations_transform = LinearCombinations(
             LCs = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -255,7 +246,7 @@ class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -299,7 +290,7 @@ class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -311,7 +302,7 @@ class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -411,7 +402,7 @@ class HyperplaneTreeClassifier(HyperplaneMixin, LinearTreeClassifier):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -445,7 +436,7 @@ class HyperplaneTreeClassifier(HyperplaneMixin, LinearTreeClassifier):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -457,7 +448,7 @@ class HyperplaneTreeClassifier(HyperplaneMixin, LinearTreeClassifier):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -554,7 +545,7 @@ class HyperplaneBoostRegressor(HyperplaneMixin, LinearBoostRegressor):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -596,7 +587,7 @@ class HyperplaneBoostRegressor(HyperplaneMixin, LinearBoostRegressor):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -608,7 +599,7 @@ class HyperplaneBoostRegressor(HyperplaneMixin, LinearBoostRegressor):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -706,7 +697,7 @@ class HyperplaneBoostClassifier(HyperplaneMixin, LinearBoostClassifier):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -747,7 +738,7 @@ class HyperplaneBoostClassifier(HyperplaneMixin, LinearBoostClassifier):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -759,7 +750,7 @@ class HyperplaneBoostClassifier(HyperplaneMixin, LinearBoostClassifier):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -879,7 +870,7 @@ class HyperplaneForestRegressor(HyperplaneMixin, LinearForestRegressor):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -928,7 +919,7 @@ class HyperplaneForestRegressor(HyperplaneMixin, LinearForestRegressor):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -941,7 +932,7 @@ class HyperplaneForestRegressor(HyperplaneMixin, LinearForestRegressor):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
@@ -1069,7 +1060,7 @@ class HyperplaneForestClassifier(HyperplaneMixin, LinearForestClassifier):
     num_terms : int, default=None
         Maximum number of terms to use if auto-generating hyperplane weights.
 
-    symmetrize : bool, defualt = True
+    do_symmetrize : bool, defualt = True
         Whether or not to take the symmetries of all hyperplane weights 
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
@@ -1119,7 +1110,7 @@ class HyperplaneForestClassifier(HyperplaneMixin, LinearForestClassifier):
     def __init__(self,
         hyperplane_weights = None,
         num_terms = None,
-        symmetrize = True,
+        do_symmetrize = True,
         tol_decimals = 4,
         torch_device = None,
         max_hp_weight = 3,
@@ -1131,7 +1122,7 @@ class HyperplaneForestClassifier(HyperplaneMixin, LinearForestClassifier):
             self,
             hyperplane_weights = hyperplane_weights,
             num_terms = num_terms,
-            symmetrize = symmetrize,
+            do_symmetrize = do_symmetrize,
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,

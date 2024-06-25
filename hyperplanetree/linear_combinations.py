@@ -33,7 +33,7 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
     def __init__(self,
                  LCs = None,
                  num_terms = None,
-                 symmetrize = True,
+                 do_symmetrize = True,
                  tol_decimals = 4,
                  torch_device = None,
                  max_hp_weight = None,
@@ -66,31 +66,11 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
 
         assert len(LCs[0]) == num_terms
 
-
-        if symmetrize:
-            # Symmetrize +/- parity
-            parity_matrix = torch.Tensor(tuple(itertools.product([1, -1], repeat = num_terms))).to(torch_device)
-            parity_matrix = parity_matrix[:, None, :]
-            LCs = torch.reshape(LCs * parity_matrix, (-1, num_terms))
-
-            # Symmetrize permutations
-            permutations_matrix = torch.Tensor(tuple((itertools.permutations(range(num_terms))))).to(torch_device).type(torch.int)
-            LCs = torch.reshape(LCs[:, permutations_matrix], (-1, num_terms))
-
-            # Remove LCs with non-trailing zeros
-            previous_was_zero = torch.zeros(len(LCs), dtype=bool, device = torch_device)
-            keep = torch.ones(len(LCs), dtype=bool, device = torch_device)
-            for i in range(num_terms):
-                keep = torch.logical_and(torch.logical_not(torch.logical_and(previous_was_zero, LCs[:, i] != 0)), keep)
-                previous_was_zero = LCs[:, i] == 0
-
-            LCs = LCs[keep]
-
-            # Normalize all combinations
-            LCs = (LCs.T / LCs[:, 0]).T
-
-            # Only take unique LCs
-            LCs = torch.unique(torch.round(LCs.to('cpu'), decimals=tol_decimals), dim=0).to(torch_device)
+        if do_symmetrize:
+            LCs = symmetrize(
+                LCs = LCs,
+                tol_decimals = tol_decimals,
+            )
 
         self.final_matrix = None
 
@@ -216,3 +196,55 @@ def generate_planes_to_index(
     out.round(decimals = tol_decimals)
     out = torch.unique(out, dim = 0).to(device)
     return out
+
+def symmetrize(
+    LCs,
+    tol_decimals = 4,
+):
+    """Symettrize linear combination weights
+    
+    Helper function for LinearCombinations transform.
+    Symmetrizes provided linear combination weights with respect to parity and permutations.
+
+    Parameters
+    ----------
+    LCs : tensor
+        Tensor of linear combination weights
+    
+    tol_decimals : int
+        Number of decimal places to consider when reducing non-unique LC weights
+
+    Returns
+    -------
+    LCs : tensor
+        Tensor of linear combination weights
+    """
+
+    num_terms = len(LCs[0])
+    torch_device = LCs.device
+
+    # Symmetrize +/- parity
+    parity_matrix = torch.Tensor(tuple(itertools.product([1, -1], repeat = num_terms))).to(torch_device)
+    parity_matrix = parity_matrix[:, None, :]
+    LCs = torch.reshape(LCs * parity_matrix, (-1, num_terms))
+
+    # Symmetrize permutations
+    permutations_matrix = torch.Tensor(tuple((itertools.permutations(range(num_terms))))).to(torch_device).type(torch.int)
+    LCs = torch.reshape(LCs[:, permutations_matrix], (-1, num_terms))
+
+    # Remove LCs with non-trailing zeros
+    previous_was_zero = torch.zeros(len(LCs), dtype=bool, device = torch_device)
+    keep = torch.ones(len(LCs), dtype=bool, device = torch_device)
+    for i in range(num_terms):
+        keep = torch.logical_and(torch.logical_not(torch.logical_and(previous_was_zero, LCs[:, i] != 0)), keep)
+        previous_was_zero = LCs[:, i] == 0
+
+    LCs = LCs[keep]
+
+    # Normalize all combinations
+    LCs = (LCs.T / LCs[:, 0]).T
+
+    # Only take unique LCs
+    LCs = torch.unique(torch.round(LCs.to('cpu'), decimals=tol_decimals), dim=0).to(torch_device)
+
+    return LCs

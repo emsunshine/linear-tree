@@ -59,7 +59,15 @@ class TorchLinearRegression(LinearRegression):
     
     def to(self, device):
         return recursive_to_device(self, device)
-
+    
+    @property
+    def intercept_(self):
+        return self.params[0]
+    
+    @property
+    def coef_(self):
+        return self.params[1:]
+    
 def tree_from_json(filename, torch_device = 'cpu'):
     """Load a tree from a json file.
 
