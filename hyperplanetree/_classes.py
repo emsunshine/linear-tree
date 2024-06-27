@@ -1,6 +1,7 @@
 import numbers
 import scipy.sparse as sp
 import torch
+import warnings
 
 from copy import deepcopy
 from joblib import Parallel, effective_n_jobs  # , delayed
@@ -8,6 +9,8 @@ from joblib import Parallel, effective_n_jobs  # , delayed
 from sklearn.dummy import DummyClassifier
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
+
+from tqdm.auto import tqdm
 
 from sklearn.base import is_regressor
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -373,71 +376,97 @@ class _LinearTree(BaseEstimator):
         start = torch.tensor([True], device = X.device).repeat(n_sample)
         mask = start.clone().type(torch.bool)
 
-        i = 1
-        while len(queue) > 0:
+        possible_mins = []
 
-            if weights is None:
-                split_t, split_col, left_node, right_node = self._split(
-                    X[mask], y[mask], bins,
-                    support_sample_weight,
-                    loss=loss)
+        if self.min_samples_split is not None:
+            if self.min_samples_leaf < 1:
+                possible_mins.append(1/self.min_samples_leaf)
             else:
-                split_t, split_col, left_node, right_node = self._split(
-                    X[mask], y[mask], bins,
-                    support_sample_weight, weights[mask],
-                    loss=loss)
+                possible_mins.append(len(X)/self.min_samples_leaf)
 
-            # no utility in splitting
-            if split_col is None or len(queue[-1]) >= self.max_depth:
-                self._leaves[queue[-1]] = self._nodes[queue[-1]]
-                del self._nodes[queue[-1]]
-                queue.pop()
+        if self.min_samples_leaf is not None:
+            if self.min_samples_split < 1:
+                possible_mins.append(0.5/self.min_samples_split)
             else:
-                model_left, loss_left, wloss_left, n_left, class_left = \
-                    left_node
-                model_right, loss_right, wloss_right, n_right, class_right = \
-                    right_node
-                self.feature_importances_[split_col] += \
-                    loss - wloss_left - wloss_right
+                possible_mins.append(0.5*len(X)/self.min_samples_split)
 
-                self._nodes[queue[-1] + 'L'] = Node(
-                    id=i, parent=queue[-1],
-                    model=model_left,
-                    loss=loss_left,
-                    w_loss=wloss_left,
-                    n_samples=n_left,
-                    threshold=self._nodes[queue[-1]].threshold[:] + [
-                        (split_col, 'L', split_t)
-                    ]
-                )
+        possible_mins.append(2**self.max_depth)
 
-                self._nodes[queue[-1] + 'R'] = Node(
-                    id=i + 1, parent=queue[-1],
-                    model=model_right,
-                    loss=loss_right,
-                    w_loss=wloss_right,
-                    n_samples=n_right,
-                    threshold=self._nodes[queue[-1]].threshold[:] + [
-                        (split_col, 'R', split_t)
-                    ]
-                )
+        estimated_leaves = min(possible_mins)
 
-                if hasattr(self, 'classes_'):
-                    self._nodes[queue[-1] + 'L'].classes = class_left
-                    self._nodes[queue[-1] + 'R'].classes = class_right
+        if not hasattr(self, 'disable_tqdm'):
+            self.disable_tqdm = False
 
-                self._nodes[queue[-1]].children = (queue[-1] + 'L', queue[-1] + 'R')
+        with tqdm(total = estimated_leaves, disable = self.disable_tqdm) as pbar:
+            pbar.set_postfix_str('Progress is estimated. Tree may finish training normally at any point beyond 50% progress.')
+            i = 1
+            while len(queue) > 0:
 
-                i += 2
-                q = queue[-1]
-                queue.pop()
-                queue.extend([q + 'R', q + 'L'])
+                if weights is None:
+                    split_t, split_col, left_node, right_node = self._split(
+                        X[mask], y[mask], bins,
+                        support_sample_weight,
+                        loss=loss)
+                else:
+                    split_t, split_col, left_node, right_node = self._split(
+                        X[mask], y[mask], bins,
+                        support_sample_weight, weights[mask],
+                        loss=loss)
 
-            if len(queue) > 0:
-                loss = self._nodes[queue[-1]].loss
-                mask = _predict_branch(
-                    X, self._nodes[queue[-1]].threshold, start.clone())
+                # no utility in splitting
+                if split_col is None or len(queue[-1]) >= self.max_depth:
+                    self._leaves[queue[-1]] = self._nodes[queue[-1]]
+                    del self._nodes[queue[-1]]
+                    queue.pop()
+                    pbar.update(1)
+                else:
+                    model_left, loss_left, wloss_left, n_left, class_left = \
+                        left_node
+                    model_right, loss_right, wloss_right, n_right, class_right = \
+                        right_node
+                    self.feature_importances_[split_col] += \
+                        loss - wloss_left - wloss_right
 
+                    self._nodes[queue[-1] + 'L'] = Node(
+                        id=i, parent=queue[-1],
+                        model=model_left,
+                        loss=loss_left,
+                        w_loss=wloss_left,
+                        n_samples=n_left,
+                        threshold=self._nodes[queue[-1]].threshold[:] + [
+                            (split_col, 'L', split_t)
+                        ]
+                    )
+
+                    self._nodes[queue[-1] + 'R'] = Node(
+                        id=i + 1, parent=queue[-1],
+                        model=model_right,
+                        loss=loss_right,
+                        w_loss=wloss_right,
+                        n_samples=n_right,
+                        threshold=self._nodes[queue[-1]].threshold[:] + [
+                            (split_col, 'R', split_t)
+                        ]
+                    )
+
+                    if hasattr(self, 'classes_'):
+                        self._nodes[queue[-1] + 'L'].classes = class_left
+                        self._nodes[queue[-1] + 'R'].classes = class_right
+
+                    self._nodes[queue[-1]].children = (queue[-1] + 'L', queue[-1] + 'R')
+
+                    i += 2
+                    q = queue[-1]
+                    queue.pop()
+                    queue.extend([q + 'R', q + 'L'])
+
+                if len(queue) > 0:
+                    loss = self._nodes[queue[-1]].loss
+                    mask = _predict_branch(
+                        X, self._nodes[queue[-1]].threshold, start.clone())
+                    
+
+        pbar.close()
         self.node_count = i
 
         return self
@@ -644,7 +673,7 @@ class _LinearTree(BaseEstimator):
                 summary[N.id] = {
                     'col': feature_names[Cl.threshold[-1][0]],
                     'th': Cl.threshold[-1][-1], #torch.round(Cl.threshold[-1][-1], decimals=5),
-                    'loss': N.loss,
+                    'loss': Cl.w_loss + Cr.w_loss,
                     'samples': Cl.n_samples + Cr.n_samples,
                     'children': (Cl.id, Cr.id),
                     'models': (Cl.model, Cr.model)

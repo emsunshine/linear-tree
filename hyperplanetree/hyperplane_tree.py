@@ -1,6 +1,7 @@
 import copy
 import json
 import torch
+import inspect
 
 from .utils import recursive_to_device
 
@@ -14,15 +15,19 @@ from .lineartree import (
 )
 from .linear_combinations import LinearCombinations
 
+
 class HyperplaneMixin():
     """Automatically take hyperplanes of features
-    
+
     A Mixin for sklearn-like models to automatically take hyperplanes of features
     before doing anything with them. The implemented functions should cover most
     sklearn-like models.
 
     Parameters
     ----------
+    """
+    parameter_docstring = \
+    """
     hyperplane_weights : tensor of float, default=None
         Tensor of hyperplane weights to use. If None, will auto-generate.
 
@@ -34,6 +39,9 @@ class HyperplaneMixin():
         (reflect to all possible combinations of axes).
         Highly recommended, unless you are interested in very specific hyperplanes
         whose weights you provide with the hyperplane_weights parameter.
+
+    do_scaling: bool (default: True)
+        Automatically scale weights in LCs to correspond to maximum and minimum values in data
 
     tol_decimals : int, default = 4
         How many decimals to consider when down-selecting to unique hyperplane weights
@@ -47,22 +55,32 @@ class HyperplaneMixin():
         Has no effect if hyperplane_weights are provided.
         See .linear_combinations.generate_planes_to_index() for more info
 
+    disable_tqdm : bool, default = False
+        Disable progress bars powered by TQDM
     """
+    __doc__ += parameter_docstring
+    
     def __init__(
             self,
-            hyperplane_weights,
-            num_terms,
-            do_symmetrize,
-            tol_decimals,
-            torch_device,
-            max_hp_weight,
+            hyperplane_weights = None,
+            num_terms = 2,
+            do_symmetrize = True,
+            do_scaling = True,
+            tol_decimals = 4,
+            torch_device = 'cpu',
+            max_hp_weight = 1,
+            disable_tqdm = False,
             ):
+                
         self.hyperplane_weights = hyperplane_weights
         self.num_terms = num_terms
         self.do_symmetrize = do_symmetrize
         self.tol_decimals = tol_decimals
         self.torch_device = torch_device
         self.max_hp_weight = max_hp_weight
+        self.do_scaling = do_scaling
+
+        self.disable_tqdm = disable_tqdm
 
         self.linear_combinations_transform = LinearCombinations(
             LCs = hyperplane_weights,
@@ -71,13 +89,14 @@ class HyperplaneMixin():
             tol_decimals = tol_decimals,
             torch_device = torch_device,
             max_hp_weight = max_hp_weight,
+            do_scaling = do_scaling,
         )
 
     def do_lcs(self, X):
         return self.linear_combinations_transform.transform(X)
     
     def fit(self, X, y, *args):
-        if self.linear_features is None:
+        if not hasattr(self, 'linear_features') or self.linear_features is None:
             self.linear_features = torch.arange(start = 0, end=len(X[0]), device = self.torch_device, dtype = torch.int)
 
         X = self.do_lcs(X)
@@ -149,7 +168,7 @@ class HyperplaneMixin():
     def to(self, device):
         self.torch_device = device
         return recursive_to_device(self, device)
-        
+
 
 class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):
     """A Hyperplane Tree Regressor.
@@ -164,150 +183,26 @@ class HyperplaneTreeRegressor(HyperplaneMixin, LinearTreeRegressor):
 
     Parameters
     ----------
-    criterion : {"mse", "rmse", "mae", "poisson", "msle"}, default="mse"
-        The function to measure the quality of a split. "poisson"
-        requires ``y >= 0``.
-
-    max_depth : int, default=torch.inf
-        The maximum depth of the tree considering only the splitting nodes.
-        A higher value implies a higher training time.
-        Can be used to regularize the tree.
-
-    min_samples_split : int or float, default=6
-        The minimum number of samples required to split an internal node.
-        The minimum valid number of samples in each node is 6.
-        A lower value implies a higher training time.
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=0.1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least `min_samples_leaf` training samples in each of the left and
-        right branches.
-        The minimum valid number of samples in each leaf is 3.
-        Can be used to regularize the tree
-        A lower value implies a higher training time.
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-    max_bins : int, default=25
-        The maximum number of bins to use to search the optimal split in each
-        feature. Features with a small number of unique values may use less than
-        ``max_bins`` bins. Must be 3 or greater.
-        A higher value implies a higher training time but increases expressivity.
-        Values in the range of 10-120 are recommended.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    categorical_features : tensor of int, default=None
-        Indicates the categorical features.
-        All categorical indices must be in `[0, n_features)`.
-        Categorical features are used for splits but are not used in
-        model fitting.
-        More categorical features imply a higher training time.
-        - None : no feature will be considered categorical.
-        - integer array-like : integer indices indicating categorical
-          features.
-        - integer : integer index indicating a categorical
-          feature.
-
-    split_features : tensor of int, default=None
-        Defines which features can be used to split on.
-        All split feature indices must be in `[0, n_features)`.
-        - None : All features will be used for splitting.
-        - integer array-like : integer indices indicating splitting features.
-        - integer : integer index indicating a single splitting feature.
-
-    linear_features : tensor of int, default=None
-        Defines which features are used for the linear model in the leaves.
-        All linear feature indices must be in `[0, n_features)`.
-        - None : All features except those in `categorical_features`
-          will be used in the leaf models.
-        - integer array-like : integer indices indicating features to
-          be used in the leaf models.
-        - integer : integer index indicating a single feature to be used
-          in the leaf models.
-
-    n_jobs : int, default=None
-        The number of jobs to run in parallel for model fitting.
-        ``None`` means 1 using one processor. ``-1`` means using all
-        processors.
-
-    hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        Normalized total reduction of criteria by splitting features.
-
-    n_targets_ : int
-        The number of targets when :meth:`fit` is performed.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import LinearRegression
-    >>> from hyperplanetree import HyperplaneTreeRegressor
-    >>> from sklearn.datasets import make_regression
-    >>> X, y = make_regression(n_samples=100, n_features=4,s
-    ...                        n_informative=2, n_targets=1,
-    ...                        random_state=0, shuffle=False)
-    >>> regr = HyperplaneTreeRegressor()
-    >>> regr.fit(X, y)
     """
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearTreeRegressor.parameter_docstring
 
-        LinearTreeRegressor.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearTreeRegressor.__init__)
 
+        hp_kwargs = {}
+        lt_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+
+        HyperplaneMixin.__init__(self, **hp_kwargs)
+        LinearTreeRegressor.__init__(self, **lt_kwargs)
 
 class HyperplaneTreeClassifier(HyperplaneMixin, LinearTreeClassifier):
     """A Hyperplane Tree Classifier.
@@ -322,137 +217,26 @@ class HyperplaneTreeClassifier(HyperplaneMixin, LinearTreeClassifier):
 
     Parameters
     ----------
-    criterion : {"hamming", "crossentropy"}, default="hamming"
-        The function to measure the quality of a split. `"crossentropy"`
-        can be used only if `base_estimator` has `predict_proba` method.
-
-    max_depth : int, default=torch.inf
-        The maximum depth of the tree considering only the splitting nodes.
-        A higher value implies a higher training time.
-
-    min_samples_split : int or float, default=6
-        The minimum number of samples required to split an internal node.
-        The minimum valid number of samples in each node is 6.
-        A lower value implies a higher training time.
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=0.1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least `min_samples_leaf` training samples in each of the left and
-        right branches.
-        The minimum valid number of samples in each leaf is 3.
-        A lower value implies a higher training time.
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-     max_bins : int, default=25
-        The maximum number of bins to use to search the optimal split in each
-        feature. Features with a small number of unique values may use less than
-        ``max_bins`` bins. Must be 3 or greater.
-        A higher value implies a higher training time but increases expressivity.
-        Values in the range of 10-120 are recommended.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    categorical_features : tensor of int, default=None
-        Indicates the categorical features.
-        All categorical indices must be in `[0, n_features)`.
-        Categorical features are used for splits but are not used in
-        model fitting.
-        More categorical features imply a higher training time.
-        - None : no feature will be considered categorical.
-        - integer array-like : integer indices indicating categorical
-          features.
-        - integer : integer index indicating a categorical
-          feature.
-
-    split_features : tensor of int, default=None
-        Defines which features can be used to split on.
-        All split feature indices must be in `[0, n_features)`.
-        - None : All features will be used for splitting.
-        - integer array-like : integer indices indicating splitting features.
-        - integer : integer index indicating a single splitting feature.
-
-    linear_features : tensor of int, default=None
-        Defines which features are used for the linear model in the leaves.
-        All linear feature indices must be in `[0, n_features)`.
-        - None : All features except those in `categorical_features`
-          will be used in the leaf models.
-        - integer array-like : integer indices indicating features to
-          be used in the leaf models.
-        - integer : integer index indicating a single feature to be used
-          in the leaf models.
-
-    n_jobs : int, default=None
-        The number of jobs to run in parallel for model fitting.
-        ``None`` means 1 using one processor. ``-1`` means using all
-        processors.
-
-    hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        Normalized total reduction of criteria by splitting features.
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
-
-    Examples
     """
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearTreeClassifier.parameter_docstring
+  
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearTreeClassifier.__init__)
 
-        LinearTreeClassifier.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+        hp_kwargs = {}
+        lt_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+            
+        HyperplaneMixin.__init__(self, *hp_kwargs)
+        LinearTreeClassifier.__init__(self, *lt_kwargs)
 
 
 
@@ -468,142 +252,26 @@ class HyperplaneBoostRegressor(HyperplaneMixin, LinearBoostRegressor):
 
     Parameters
     ----------
-    loss : {"linear", "square", "absolute", "exponential"}, default="linear"
-        The function used to calculate the residuals of each sample.
+    """
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearBoostRegressor.parameter_docstring
 
-    n_estimators : int, default=10
-        The number of boosting stages to perform. It corresponds to the number
-        of the new features generated.
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearBoostRegressor.__init__)
 
-    max_depth : int, default=torch.inf
-        The maximum depth of the tree. If None, then nodes are expanded until
-        all leaves are pure or until all leaves contain less than
-        min_samples_split samples.
+        hp_kwargs = {}
+        lt_kwargs = {}
 
-    min_samples_split : int or float, default=2
-        The minimum number of samples required to split an internal node:
-
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least ``min_samples_leaf`` training samples in each of the left and
-        right branches.  This may have the effect of smoothing the model,
-        especially in regression.
-
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-    min_weight_fraction_leaf : float, default=0.0
-        The minimum weighted fraction of the sum total of weights (of all
-        the input samples) required to be at a leaf node. Samples have
-        equal weight when sample_weight is not provided.
-
-    max_features : int, float or {"auto", "sqrt", "log2"}, default=None
-        The number of features to consider when looking for the best split:
-
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a fraction and
-          `int(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=n_features`.
-        - If "sqrt", then `max_features=sqrt(n_features)`.
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
-
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-
-    random_state : int, RandomState instance or None, default=None
-        Controls the randomness of the estimator.
-
-    max_leaf_nodes : int, default=None
-        Grow a tree with ``max_leaf_nodes`` in best-first fashion.
-        Best nodes are defined as relative reduction in impurity.
-        If None then unlimited number of leaf nodes.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    ccp_alpha : non-negative float, default=0.0
-        Complexity parameter used for Minimal Cost-Complexity Pruning. The
-        subtree with the largest cost complexity that is smaller than
-        ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
-        :ref:`minimal_cost_complexity_pruning` for details.
-
-    hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    n_features_out_ : int
-        The total number of features used to fit the base estimator in the
-        last iteration. The number of output features is equal to the sum
-        of n_features_in_ and n_estimators.
-
-    coef_ : array of shape (n_features_out_, ) or (n_targets, n_features_out_)
-        Estimated coefficients for the linear regression problem.
-        If multiple targets are passed during the fit (y 2D), this is a
-        2D array of shape (n_targets, n_features_out_), while if only one target
-        is passed, this is a 1D array of length n_features_out_.
-
-    intercept_ : float or array of shape (n_targets, )
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`
-"""
-
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
-
-        LinearBoostRegressor.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+            
+        HyperplaneMixin.__init__(self, *hp_kwargs)
+        LinearBoostRegressor.__init__(self, *lt_kwargs)
 
 
 class HyperplaneBoostClassifier(HyperplaneMixin, LinearBoostClassifier):
@@ -618,143 +286,26 @@ class HyperplaneBoostClassifier(HyperplaneMixin, LinearBoostClassifier):
 
     Parameters
     ----------
-    loss : {"hamming", "entropy"}, default="entropy"
-        The function used to calculate the residuals of each sample.
-        `"entropy"` can be used only if `base_estimator` has `predict_proba`
-        method.
-
-    n_estimators : int, default=10
-        The number of boosting stages to perform. It corresponds to the number
-        of the new features generated.
-
-    max_depth : int, default=torch.inf
-        The maximum depth of the tree. If None, then nodes are expanded until
-        all leaves are pure or until all leaves contain less than
-        min_samples_split samples.
-
-    min_samples_split : int or float, default=2
-        The minimum number of samples required to split an internal node:
-
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least ``min_samples_leaf`` training samples in each of the left and
-        right branches.  This may have the effect of smoothing the model,
-        especially in regression.
-
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-    min_weight_fraction_leaf : float, default=0.0
-        The minimum weighted fraction of the sum total of weights (of all
-        the input samples) required to be at a leaf node. Samples have
-        equal weight when sample_weight is not provided.
-
-    max_features : int, float or {"auto", "sqrt", "log2"}, default=None
-        The number of features to consider when looking for the best split:
-
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a fraction and
-          `int(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=n_features`.
-        - If "sqrt", then `max_features=sqrt(n_features)`.
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
-
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-
-    random_state : int, RandomState instance or None, default=None
-        Controls the randomness of the estimator.
-
-    max_leaf_nodes : int, default=None
-        Grow a tree with ``max_leaf_nodes`` in best-first fashion.
-        Best nodes are defined as relative reduction in impurity.
-        If None then unlimited number of leaf nodes.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    ccp_alpha : non-negative float, default=0.0
-        Complexity parameter used for Minimal Cost-Complexity Pruning. The
-        subtree with the largest cost complexity that is smaller than
-        ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
-        :ref:`minimal_cost_complexity_pruning` for details.
-
-    hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    n_features_out_ : int
-        The total number of features used to fit the base estimator in the
-        last iteration. The number of output features is equal to the sum
-        of n_features_in_ and n_estimators.
-
-    coef_ : ndarray of shape (1, n_features_out_) or (n_classes, n_features_out_)
-        Coefficient of the features in the decision function.
-
-    intercept_ : float or array of shape (n_classes, )
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
     """
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearBoostClassifier.parameter_docstring
 
-        LinearBoostClassifier.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearBoostClassifier.__init__)
+
+        hp_kwargs = {}
+        lt_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+            
+        HyperplaneMixin.__init__(self, *hp_kwargs)
+        LinearBoostClassifier.__init__(self, *lt_kwargs)
 
 
 class HyperplaneForestRegressor(HyperplaneMixin, LinearForestRegressor):
@@ -771,172 +322,26 @@ class HyperplaneForestRegressor(HyperplaneMixin, LinearForestRegressor):
 
     Parameters
     ----------
-    n_estimators : int, default=100
-        The number of trees in the forest.
-
-    max_depth : int, default=None
-        The maximum depth of the tree. If None, then nodes are expanded until
-        all leaves are pure or until all leaves contain less than
-        min_samples_split samples.
-
-    min_samples_split : int or float, default=2
-        The minimum number of samples required to split an internal node:
-
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least ``min_samples_leaf`` training samples in each of the left and
-        right branches.  This may have the effect of smoothing the model,
-        especially in regression.
-
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-    min_weight_fraction_leaf : float, default=0.0
-        The minimum weighted fraction of the sum total of weights (of all
-        the input samples) required to be at a leaf node. Samples have
-        equal weight when sample_weight is not provided.
-
-    max_features : {"auto", "sqrt", "log2"}, int or float, default="auto"
-        The number of features to consider when looking for the best split:
-
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a fraction and
-          `round(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=n_features`.
-        - If "sqrt", then `max_features=sqrt(n_features)`.
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
-
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-
-    max_leaf_nodes : int, default=None
-        Grow trees with ``max_leaf_nodes`` in best-first fashion.
-        Best nodes are defined as relative reduction in impurity.
-        If None then unlimited number of leaf nodes.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    bootstrap : bool, default=True
-        Whether bootstrap samples are used when building trees. If False, the
-        whole dataset is used to build each tree.
-
-    oob_score : bool, default=False
-        Whether to use out-of-bag samples to estimate the generalization score.
-        Only available if bootstrap=True.
-
-    n_jobs : int, default=None
-        The number of jobs to run in parallel. :meth:`fit`, :meth:`predict`,
-        :meth:`decision_path` and :meth:`apply` are all parallelized over the
-        trees. ``None`` means 1 unless in a :obj:`joblib.parallel_backend`
-        context. ``-1`` means using all processors.
-
-    random_state : int, RandomState instance or None, default=None
-        Controls both the randomness of the bootstrapping of the samples used
-        when building trees (if ``bootstrap=True``) and the sampling of the
-        features to consider when looking for the best split at each node
-        (if ``max_features < n_features``).
-
-    ccp_alpha : non-negative float, default=0.0
-        Complexity parameter used for Minimal Cost-Complexity Pruning. The
-        subtree with the largest cost complexity that is smaller than
-        ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
-        :ref:`minimal_cost_complexity_pruning` for details.
-
-    max_samples : int or float, default=None
-        If bootstrap is True, the number of samples to draw from X
-        to train each base estimator.
-
-        - If None (default), then draw `X.shape[0]` samples.
-        - If int, then draw `max_samples` samples.
-        - If float, then draw `max_samples * X.shape[0]` samples. Thus,
-          `max_samples` should be in the interval `(0, 1]`.
-
-    hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        The impurity-based feature importances.
-        The higher, the more important the feature.
-        The importance of a feature is computed as the (normalized)
-        total reduction of the criterion brought by that feature.  It is also
-        known as the Gini importance.
-
-    coef_ : array of shape (n_features, ) or (n_targets, n_features)
-        Estimated coefficients for the linear regression problem.
-        If multiple targets are passed during the fit (y 2D), this is a
-        2D array of shape (n_targets, n_features), while if only one target
-        is passed, this is a 1D array of length n_features.
-
-    intercept_ : float or array of shape (n_targets,)
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`.
-
-    base_estimator_ : object
-        A fitted linear model instance.
-
-    forest_estimator_ : object
-        A fitted random forest instance.
     """
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
-    
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearForestRegressor.parameter_docstring
 
-        LinearForestRegressor.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearForestRegressor.__init__)
+
+        hp_kwargs = {}
+        lt_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+            
+        HyperplaneMixin.__init__(self, *hp_kwargs)
+        LinearForestRegressor.__init__(self, *lt_kwargs)
 
 
 class HyperplaneForestClassifier(HyperplaneMixin, LinearForestClassifier):
@@ -961,169 +366,23 @@ class HyperplaneForestClassifier(HyperplaneMixin, LinearForestClassifier):
 
     Parameters
     ----------
-    n_estimators : int, default=100
-        The number of trees in the forest.
-
-    max_depth : int, default=None
-        The maximum depth of the tree. If None, then nodes are expanded until
-        all leaves are pure or until all leaves contain less than
-        min_samples_split samples.
-
-    min_samples_split : int or float, default=2
-        The minimum number of samples required to split an internal node:
-
-        - If int, then consider `min_samples_split` as the minimum number.
-        - If float, then `min_samples_split` is a fraction and
-          `ceil(min_samples_split * n_samples)` are the minimum
-          number of samples for each split.
-
-    min_samples_leaf : int or float, default=1
-        The minimum number of samples required to be at a leaf node.
-        A split point at any depth will only be considered if it leaves at
-        least ``min_samples_leaf`` training samples in each of the left and
-        right branches.  This may have the effect of smoothing the model,
-        especially in regression.
-
-        - If int, then consider `min_samples_leaf` as the minimum number.
-        - If float, then `min_samples_leaf` is a fraction and
-          `ceil(min_samples_leaf * n_samples)` are the minimum
-          number of samples for each node.
-
-    min_weight_fraction_leaf : float, default=0.0
-        The minimum weighted fraction of the sum total of weights (of all
-        the input samples) required to be at a leaf node. Samples have
-        equal weight when sample_weight is not provided.
-
-    max_features : {"auto", "sqrt", "log2"}, int or float, default="auto"
-        The number of features to consider when looking for the best split:
-
-        - If int, then consider `max_features` features at each split.
-        - If float, then `max_features` is a fraction and
-          `round(max_features * n_features)` features are considered at each
-          split.
-        - If "auto", then `max_features=n_features`.
-        - If "sqrt", then `max_features=sqrt(n_features)`.
-        - If "log2", then `max_features=log2(n_features)`.
-        - If None, then `max_features=n_features`.
-
-        Note: the search for a split does not stop until at least one
-        valid partition of the node samples is found, even if it requires to
-        effectively inspect more than ``max_features`` features.
-
-    max_leaf_nodes : int, default=None
-        Grow trees with ``max_leaf_nodes`` in best-first fashion.
-        Best nodes are defined as relative reduction in impurity.
-        If None then unlimited number of leaf nodes.
-
-    min_impurity_decrease : float, default=0.0
-        A node will be split if this split induces a decrease of the impurity
-        greater than or equal to this value.
-
-    bootstrap : bool, default=True
-        Whether bootstrap samples are used when building trees. If False, the
-        whole dataset is used to build each tree.
-
-    oob_score : bool, default=False
-        Whether to use out-of-bag samples to estimate the generalization score.
-        Only available if bootstrap=True.
-
-    n_jobs : int, default=None
-        The number of jobs to run in parallel. :meth:`fit`, :meth:`predict`,
-        :meth:`decision_path` and :meth:`apply` are all parallelized over the
-        trees. ``None`` means 1 unless in a :obj:`joblib.parallel_backend`
-        context. ``-1`` means using all processors.
-
-    random_state : int, RandomState instance or None, default=None
-        Controls both the randomness of the bootstrapping of the samples used
-        when building trees (if ``bootstrap=True``) and the sampling of the
-        features to consider when looking for the best split at each node
-        (if ``max_features < n_features``).
-
-    ccp_alpha : non-negative float, default=0.0
-        Complexity parameter used for Minimal Cost-Complexity Pruning. The
-        subtree with the largest cost complexity that is smaller than
-        ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
-        :ref:`minimal_cost_complexity_pruning` for details.
-
-    max_samples : int or float, default=None
-        If bootstrap is True, the number of samples to draw from X
-        to train each base estimator.
-
-        - If None (default), then draw `X.shape[0]` samples.
-        - If int, then draw `max_samples` samples.
-        - If float, then draw `max_samples * X.shape[0]` samples. Thus,
-          `max_samples` should be in the interval `(0, 1]`.
-
-        hyperplane_weights : tensor of float, default=None
-        Tensor of hyperplane weights to use. If None, will auto-generate.
-
-    num_terms : int, default=None
-        Maximum number of terms to use if auto-generating hyperplane weights.
-
-    do_symmetrize : bool, defualt = True
-        Whether or not to take the symmetries of all hyperplane weights 
-        (reflect to all possible combinations of axes).
-        Highly recommended, unless you are interested in very specific hyperplanes
-        whose weights you provide with the hyperplane_weights parameter.
-
-    tol_decimals : int, default = 4
-        How many decimals to consider when down-selecting to unique hyperplane weights
-
-    torch_device : int, default = None
-        torch device for any tensors generated for the tree.
-        Should be the same device that your data will be on.
-
-    max_hp_weight : int, default = 3
-        Highest weight considered when auto-generating hyperplane weights.
-        Has no effect if hyperplane_weights are provided.
-        See .linear_combinations.generate_planes_to_index() for more info
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        The impurity-based feature importances.
-        The higher, the more important the feature.
-        The importance of a feature is computed as the (normalized)
-        total reduction of the criterion brought by that feature.  It is also
-        known as the Gini importance.
-
-    coef_ : ndarray of shape (1, n_features_out_)
-        Coefficient of the features in the decision function.
-
-    intercept_ : float
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`.
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
-
-    base_estimator_ : object
-        A fitted linear model instance.
-
-    forest_estimator_ : object
-        A fitted random forest instance.
     """
-        
-    def __init__(self,
-        hyperplane_weights = None,
-        num_terms = None,
-        do_symmetrize = True,
-        tol_decimals = 4,
-        torch_device = None,
-        max_hp_weight = 3,
-        **kwargs
-        ):
+    __doc__ += HyperplaneMixin.parameter_docstring + LinearForestClassifier.parameter_docstring
 
-        LinearForestClassifier.__init__(self, **kwargs)
-        HyperplaneMixin.__init__(
-            self,
-            hyperplane_weights = hyperplane_weights,
-            num_terms = num_terms,
-            do_symmetrize = do_symmetrize,
-            tol_decimals = tol_decimals,
-            torch_device = torch_device,
-            max_hp_weight = max_hp_weight,
-            )
+    def __init__(self, **kwargs):
+        hp_sig = inspect.signature(HyperplaneMixin.__init__)
+        lt_sig = inspect.signature(LinearForestClassifier.__init__)
+
+        hp_kwargs = {}
+        lt_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in hp_sig.parameters.keys():
+                hp_kwargs[key] = value
+            elif key in lt_sig.parameters.keys():
+                lt_kwargs[key] = value
+            else:
+                raise AttributeError(f'Unknown keyword argument: {key}')
+            
+        HyperplaneMixin.__init__(self, *hp_kwargs)
+        LinearForestClassifier.__init__(self, *lt_kwargs)

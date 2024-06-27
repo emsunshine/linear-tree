@@ -46,9 +46,9 @@ class TorchLinearRegression(LinearRegression):
             x = torch.hstack((torch.ones((len(x),1), device = x.device), x))
 
         if sample_weight is None:
-            self.params = torch.linalg.pinv(x.T @ x) @ (x.T @ y)
+            self.params = torch.linalg.inv(x.T @ x) @ (x.T @ y)
         else:
-            self.params = torch.linalg.pinv(x.T @ sample_weight @ x) @ (x.T @ sample_weight @ y)
+            self.params = torch.linalg.inv(x.T @ sample_weight @ x) @ (x.T @ sample_weight @ y)
 
     def predict(self, x):
         if not isinstance(x, torch.Tensor):

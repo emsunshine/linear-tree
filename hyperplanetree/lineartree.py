@@ -21,10 +21,8 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
 
     Parameters
     ----------
-    base_estimator : object
-        The base estimator to fit on dataset splits.
-        The base estimator must be a sklearn.linear_model.
-
+    """
+    parameter_docstring = """
     criterion : {"mse", "rmse", "mae", "poisson"}, default="mse"
         The function to measure the quality of a split. "poisson"
         requires ``y >= 0``.
@@ -57,7 +55,7 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
     max_bins : int, default=25
         The maximum number of bins to use to search the optimal split in each
         feature. Features with a small number of unique values may use less than
-        ``max_bins`` bins. Must be lower than 120 and larger than 10.
+        ``max_bins`` bins. Must be lower than 120 and larger than 3.
         A higher value implies a higher training time.
 
     min_impurity_decrease : float, default=0.0
@@ -97,31 +95,8 @@ class LinearTreeRegressor(_LinearTree, RegressorMixin):
         The number of jobs to run in parallel for model fitting.
         ``None`` means 1 using one processor. ``-1`` means using all
         processors.
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        Normalized total reduction of criteria by splitting features.
-
-    n_targets_ : int
-        The number of targets when :meth:`fit` is performed.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import LinearRegression
-    >>> from lineartree import LinearTreeRegressor
-    >>> from sklearn.datasets import make_regression
-    >>> X, y = make_regression(n_samples=100, n_features=4,
-    ...                        n_informative=2, n_targets=1,
-    ...                        random_state=0, shuffle=False)
-    >>> regr = LinearTreeRegressor(base_estimator=LinearRegression())
-    >>> regr.fit(X, y)
-    >>> regr.predict([[0, 0, 0, 0]])
-    array([8.8817842e-16])
     """
+
     def __init__(self, *, criterion='mse', max_depth=torch.inf,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
@@ -248,6 +223,9 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
 
     Parameters
     ----------
+    """
+    parameter_docstring = \
+    """
     base_estimator : object
         The base estimator to fit on dataset splits.
         The base estimator must be a sklearn.linear_model.
@@ -327,31 +305,9 @@ class LinearTreeClassifier(_LinearTree, ClassifierMixin):
         The number of jobs to run in parallel for model fitting.
         ``None`` means 1 using one processor. ``-1`` means using all
         processors.
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        Normalized total reduction of criteria by splitting features.
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import RidgeClassifier
-    >>> from lineartree import LinearTreeClassifier
-    >>> from sklearn.datasets import make_classification
-    >>> X, y = make_classification(n_samples=100, n_features=4,
-    ...                            n_informative=2, n_redundant=0,
-    ...                            random_state=0, shuffle=False)
-    >>> clf = LinearTreeClassifier(base_estimator=RidgeClassifier())
-    >>> clf.fit(X, y)
-    >>> clf.predict([[0, 0, 0, 0]])
-    array([1])
     """
+    __doc__ += parameter_docstring
+
     def __init__(self, base_estimator=TorchLinearRegression(), *, criterion='hamming', max_depth=torch.inf,
                  min_samples_split=6, min_samples_leaf=0.1, max_bins=25,
                  min_impurity_decrease=0.0, categorical_features=None,
@@ -543,10 +499,8 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
 
     Parameters
     ----------
-    base_estimator : object
-        The base estimator iteratively fitted.
-        The base estimator must be a sklearn.linear_model.
-
+    """
+    parameter_docstring = """
     loss : {"linear", "square", "absolute", "exponential"}, default="linear"
         The function used to calculate the residuals of each sample.
 
@@ -618,45 +572,14 @@ class LinearBoostRegressor(_LinearBoosting, RegressorMixin):
         ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
         :ref:`minimal_cost_complexity_pruning` for details.
 
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    n_features_out_ : int
-        The total number of features used to fit the base estimator in the
-        last iteration. The number of output features is equal to the sum
-        of n_features_in_ and n_estimators.
-
-    coef_ : array of shape (n_features_out_, ) or (n_targets, n_features_out_)
-        Estimated coefficients for the linear regression problem.
-        If multiple targets are passed during the fit (y 2D), this is a
-        2D array of shape (n_targets, n_features_out_), while if only one target
-        is passed, this is a 1D array of length n_features_out_.
-
-    intercept_ : float or array of shape (n_targets, )
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import LinearRegression
-    >>> from lineartree import LinearBoostRegressor
-    >>> from sklearn.datasets import make_regression
-    >>> X, y = make_regression(n_samples=100, n_features=4,
-    ...                        n_informative=2, n_targets=1,
-    ...                        random_state=0, shuffle=False)
-    >>> regr = LinearBoostRegressor(base_estimator=LinearRegression())
-    >>> regr.fit(X, y)
-    >>> regr.predict([[0, 0, 0, 0]])
-    array([8.8817842e-16])
-
     References
     ----------
     Explainable boosted linear regression for time series forecasting.
     Authors: Igor Ilic, Berk Gorgulu, Mucahit Cevik, Mustafa Gokce Baydogan.
     (https://arxiv.org/abs/2009.09110)
     """
+    __doc__ += parameter_docstring
+
     def __init__(self, base_estimator=TorchLinearRegression(), *, loss='linear', n_estimators=10,
                  max_depth=3, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0.0, max_features=None,
@@ -755,10 +678,9 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
 
     Parameters
     ----------
-    base_estimator : object
-        The base estimator iteratively fitted.
-        The base estimator must be a sklearn.linear_model.
-
+    """
+    parameter_docstring = \
+    """
     loss : {"hamming", "entropy"}, default="entropy"
         The function used to calculate the residuals of each sample.
         `"entropy"` can be used only if `base_estimator` has `predict_proba`
@@ -831,39 +753,6 @@ class LinearBoostClassifier(_LinearBoosting, ClassifierMixin):
         subtree with the largest cost complexity that is smaller than
         ``ccp_alpha`` will be chosen. By default, no pruning is performed. See
         :ref:`minimal_cost_complexity_pruning` for details.
-
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    n_features_out_ : int
-        The total number of features used to fit the base estimator in the
-        last iteration. The number of output features is equal to the sum
-        of n_features_in_ and n_estimators.
-
-    coef_ : ndarray of shape (1, n_features_out_) or (n_classes, n_features_out_)
-        Coefficient of the features in the decision function.
-
-    intercept_ : float or array of shape (n_classes, )
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import RidgeClassifier
-    >>> from lineartree import LinearBoostClassifier
-    >>> from sklearn.datasets import make_classification
-    >>> X, y = make_classification(n_samples=100, n_features=4,
-    ...                            n_informative=2, n_redundant=0,
-    ...                            random_state=0, shuffle=False)
-    >>> clf = LinearBoostClassifier(base_estimator=RidgeClassifier())
-    >>> clf.fit(X, y)
-    >>> clf.predict([[0, 0, 0, 0]])
-    array([1])
 
     References
     ----------
@@ -1020,6 +909,9 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
 
     Parameters
     ----------
+    """
+    parameter_docstring = \
+    """
     base_estimator : object
         The linear estimator fitted on the raw target.
         The linear estimator must be a regressor from sklearn.linear_model.
@@ -1117,53 +1009,14 @@ class LinearForestRegressor(_LinearForest, RegressorMixin):
         - If float, then draw `max_samples * X.shape[0]` samples. Thus,
           `max_samples` should be in the interval `(0, 1]`.
 
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        The impurity-based feature importances.
-        The higher, the more important the feature.
-        The importance of a feature is computed as the (normalized)
-        total reduction of the criterion brought by that feature.  It is also
-        known as the Gini importance.
-
-    coef_ : array of shape (n_features, ) or (n_targets, n_features)
-        Estimated coefficients for the linear regression problem.
-        If multiple targets are passed during the fit (y 2D), this is a
-        2D array of shape (n_targets, n_features), while if only one target
-        is passed, this is a 1D array of length n_features.
-
-    intercept_ : float or array of shape (n_targets,)
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`.
-
-    base_estimator_ : object
-        A fitted linear model instance.
-
-    forest_estimator_ : object
-        A fitted random forest instance.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import LinearRegression
-    >>> from lineartree import LinearForestRegressor
-    >>> from sklearn.datasets import make_regression
-    >>> X, y = make_regression(n_samples=100, n_features=4,
-    ...                        n_informative=2, n_targets=1,
-    ...                        random_state=0, shuffle=False)
-    >>> regr = LinearForestRegressor(base_estimator=LinearRegression())
-    >>> regr.fit(X, y)
-    >>> regr.predict([[0, 0, 0, 0]])
-    array([8.8817842e-16])
-
     References
     ----------
     Regression-Enhanced Random Forests.
     Authors: Haozhe Zhang, Dan Nettleton, Zhengyuan Zhu.
     (https://arxiv.org/abs/1904.10416)
     """
+    __doc__ += parameter_docstring
+
     def __init__(self, base_estimator=TorchLinearRegression(), *, n_estimators=100,
                  max_depth=None, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0., max_features="auto",
@@ -1285,6 +1138,9 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
 
     Parameters
     ----------
+    """
+    parameter_docstring = \
+    """
     base_estimator : object
         The linear estimator fitted on the raw target.
         The linear estimator must be a regressor from sklearn.linear_model.
@@ -1382,53 +1238,14 @@ class LinearForestClassifier(_LinearForest, ClassifierMixin):
         - If float, then draw `max_samples * X.shape[0]` samples. Thus,
           `max_samples` should be in the interval `(0, 1]`.
 
-    Attributes
-    ----------
-    n_features_in_ : int
-        The number of features when :meth:`fit` is performed.
-
-    feature_importances_ : ndarray of shape (n_features, )
-        The impurity-based feature importances.
-        The higher, the more important the feature.
-        The importance of a feature is computed as the (normalized)
-        total reduction of the criterion brought by that feature.  It is also
-        known as the Gini importance.
-
-    coef_ : ndarray of shape (1, n_features_out_)
-        Coefficient of the features in the decision function.
-
-    intercept_ : float
-        Independent term in the linear model. Set to 0 if `fit_intercept = False`
-        in `base_estimator`.
-
-    classes_ : ndarray of shape (n_classes, )
-        A list of class labels known to the classifier.
-
-    base_estimator_ : object
-        A fitted linear model instance.
-
-    forest_estimator_ : object
-        A fitted random forest instance.
-
-    Examples
-    --------
-    >>> from sklearn.linear_model import LinearRegression
-    >>> from lineartree import LinearForestClassifier
-    >>> from sklearn.datasets import make_classification
-    >>> X, y = make_classification(n_samples=100, n_classes=2, n_features=4,
-    ...                            n_informative=2, n_redundant=0,
-    ...                            random_state=0, shuffle=False)
-    >>> clf = LinearForestClassifier(base_estimator=LinearRegression())
-    >>> clf.fit(X, y)
-    >>> clf.predict([[0, 0, 0, 0]])
-    array([1])
-
     References
     ----------
     Regression-Enhanced Random Forests.
     Authors: Haozhe Zhang, Dan Nettleton, Zhengyuan Zhu.
     (https://arxiv.org/abs/1904.10416)
     """
+    __doc__ += parameter_docstring
+
     def __init__(self, base_estimator=TorchLinearRegression(), *, n_estimators=100,
                  max_depth=None, min_samples_split=2, min_samples_leaf=1,
                  min_weight_fraction_leaf=0., max_features="auto",

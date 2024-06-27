@@ -22,18 +22,29 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
         If None, determined automatically from shape of LCs
         Currently, only 2 is supported
 
-    symmetrize: bool
+    do_symmetrize: bool (default: True)
         Whether or not to symmetrize the input LCs. e.g. if you enter [[1, 2]]
         you will get [[1, -2], [1, -0.5], [1, 0.5], [1,2]].
 
-    tol_decimals: int
+    do_scaling: bool (default: True)
+        Automatically scale weights in LCs to correspond to maximum and minimum values in data
+
+    tol_decimals: int (default: 4)
         How many decimal places of precision. Useful when reducing degeneracies
         after symmetrization step.
+
+    torch_device: torch.device or str or None (default: None)
+        Device where tensors are created. If None, will default to LCs.device
+        If LCs is also None, will default to 'cpu'
+
+    max_hp_weight: int
+        If generating LCs in this function, highest LC weight to consider
     """
     def __init__(self,
                  LCs = None,
                  num_terms = None,
                  do_symmetrize = True,
+                 do_scaling = True,
                  tol_decimals = 4,
                  torch_device = None,
                  max_hp_weight = None,
@@ -75,11 +86,12 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
         self.final_matrix = None
 
         self.LCs = LCs
-        self.symmetrize = symmetrize
+        self.do_symmetrize = do_symmetrize
         self.num_terms = num_terms
         self.tol_decimals = tol_decimals
         self.torch_device = torch_device
         self.max_hp_weight = max_hp_weight
+        self.do_scaling = do_scaling
 
     def fit(self, X, y=None):
         return self
@@ -89,6 +101,8 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             X = torch.tensor(X)
             
         if (self.final_matrix is None) or (X.shape[1] != len(self.final_matrix)):
+            # Remove identity rows from LCs
+            self.LCs = self.LCs[torch.sum(torch.abs(self.LCs), dim=1) != 1]
 
             num_cols = X.shape[1]
             num_out_cols = int(num_cols + torch.math.factorial(num_cols) / (torch.math.factorial(num_cols - self.num_terms)) * len(self.LCs))
@@ -108,8 +122,25 @@ class LinearCombinations(TransformerMixin, BaseEstimator):
             final_matrix = (final_matrix.T / leftmost_nonzero).T
 
             # take only unique rows in final matrix
-            final_matrix = torch.unique(torch.round(final_matrix[num_cols:].to('cpu'), decimals=self.tol_decimals), dim=0).to(X.device)
+            final_matrix = torch.unique(
+                torch.round(
+                    final_matrix[num_cols:].to('cpu'),
+                    decimals=self.tol_decimals,
+                    ),
+                dim=0,
+                sorted=True,
+                ).to(X.device)
+            
+            if self.do_scaling:
+                ranges = torch.max(X, dim = 0)[0] - torch.min(X, dim = 0)[0]
+                final_matrix /= ranges
 
+                # Renormalize
+                leftmost_nonzero = torch.argmax((final_matrix != 0).type(torch.int), axis=1)
+                leftmost_nonzero = final_matrix[range(len(final_matrix)), leftmost_nonzero]
+                final_matrix = (final_matrix.T / leftmost_nonzero).T
+            
+            # Insert identity matrix to first rows
             self.final_matrix = torch.zeros((num_cols+len(final_matrix), num_cols), device = X.device)
             self.final_matrix[:num_cols] = torch.eye(num_cols, device = X.device)
             self.final_matrix[num_cols:] = final_matrix
