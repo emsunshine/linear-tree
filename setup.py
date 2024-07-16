@@ -3,11 +3,11 @@ from setuptools import setup, find_packages
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '0.3.5'
+VERSION = '0.4.0'
 PACKAGE_NAME = 'linear-tree'
-AUTHOR = 'Marco Cerliani'
-AUTHOR_EMAIL = 'cerlymarco@gmail.com'
-URL = 'https://github.com/cerlymarco/linear-tree'
+AUTHOR = 'Marco Cerliani, Ethan Sunshine'
+AUTHOR_EMAIL = 'emsunshine@andrew.cmu.edu'
+URL = 'https://github.com/emsunshine/linear-tree'
 
 LICENSE = 'MIT'
 DESCRIPTION = 'A python library to build Model Trees with Linear Models at the leaves.'
@@ -16,7 +16,7 @@ LONG_DESC_TYPE = "text/markdown"
 
 INSTALL_REQUIRES = [
     'scikit-learn>=0.24.2',
-    'numpy',
+    'numpy<2.0.0',
     'scipy'
 ]
 
