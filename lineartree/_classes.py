@@ -508,9 +508,6 @@ class _LinearTree(BaseEstimator):
             self._min_samples_leaf = int(np.ceil(self.min_samples_leaf * n_sample))
             self._min_samples_leaf = max(3, self._min_samples_leaf)
 
-        if not 1 <= self.max_depth <= 20:
-            raise ValueError("max_depth must be an integer in [1, 20].")
-
         if not 3 <= self.max_bins <= 120:
             raise ValueError("max_bins must be an integer in [3, 120].")
 
