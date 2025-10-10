@@ -1,1 +1,1 @@
-**This fork is not being actively worked on any more. If you are interested in a faster and more feature-rich implementaation of linear model decision trees, please consider my project: [Hyperplane Tree](https://github.com/LLNL/systems2atoms/tree/main/systems2atoms/hyperplanetree)**
+**This fork is not being actively worked on any more. If you are interested in a faster and more feature-rich implementation of linear model decision trees, please consider my project: [Hyperplane Tree](https://github.com/LLNL/systems2atoms/tree/main/systems2atoms/hyperplanetree)**
